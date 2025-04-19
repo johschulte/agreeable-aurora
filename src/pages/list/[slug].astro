@@ -1,0 +1,162 @@
+---
+// Diese Seite wird serverseitig gerendert, nicht statisch
+export const prerender = false;
+
+import Layout from '../../layouts/Layout.astro';
+import { getListBySlug } from '../../utils/db.js';
+
+// FR003, FR010: Anzeigen einer Liste anhand des Slugs
+const { slug } = Astro.params;
+
+// Listendaten abrufen
+let list = null;
+let error = null;
+
+try {
+  list = await getListBySlug(slug);
+  
+  if (!list) {
+    error = 'Liste nicht gefunden';
+  }
+} catch (e: unknown) {
+  console.error('Fehler beim Abrufen der Liste:', e);
+  error = e instanceof Error ? e.message : 'Fehler beim Laden der Liste. Bitte versuchen Sie es später erneut.';
+}
+---
+
+<Layout>
+  <div class="container py-10">
+    <div class="mx-auto max-w-3xl">
+      {error ? (
+        <div class="p-4 rounded-md bg-destructive/15 text-destructive">
+          <p class="font-medium">Fehler</p>
+          <p class="text-sm">{error}</p>
+          <a href="/" class="text-primary hover:underline mt-2 inline-block">
+            Zurück zur Startseite
+          </a>
+        </div>
+      ) : (
+        <>
+          <div class="flex justify-between items-start mb-8">
+            <div>
+              <h1 class="text-3xl font-bold tracking-tight">{list.title}</h1>
+              {list.description && (
+                <p class="mt-2 text-muted-foreground">{list.description}</p>
+              )}
+            </div>
+            <a 
+              href={`/list/${list.slug}/edit`}
+              class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+            >
+              Liste bearbeiten
+            </a>
+          </div>
+
+          <div class="bg-card rounded-lg border shadow-sm overflow-hidden">
+            <div class="p-6">
+              <h2 class="text-xl font-semibold mb-4">URLs in dieser Liste</h2>
+              
+              {list.links.length === 0 ? (
+                <div class="py-8 text-center">
+                  <div class="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-muted-foreground">
+                      <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                    </svg>
+                  </div>
+                  <p class="text-muted-foreground">Diese Liste enthält noch keine URLs.</p>
+                  <a 
+                    href={`/list/${list.slug}/edit`}
+                    class="text-primary hover:underline mt-2 inline-block"
+                  >
+                    URLs hinzufügen
+                  </a>
+                </div>
+              ) : (
+                <ul class="space-y-4">
+                  {list.links.map((link: any) => (
+                    <li class="rounded-md border p-4 hover:bg-muted/50 transition-colors">
+                      <div class="flex items-start">
+                        {link.image && (
+                          <div class="mr-4 flex-shrink-0">
+                            <img 
+                              src={link.image} 
+                              alt={link.title} 
+                              class="h-16 w-16 object-cover rounded-md border" 
+                              onError={(e) => {
+                                const target = e.target as HTMLImageElement;
+                                target.style.display = 'none';
+                              }}
+                            />
+                          </div>
+                        )}
+                        <div class="flex-1">
+                          <a 
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-primary font-medium hover:underline text-lg block mb-1"
+                          >
+                            {link.title}
+                          </a>
+                          {link.description && (
+                            <p class="text-sm text-muted-foreground">{link.description}</p>
+                          )}
+                          <div class="mt-2 flex items-center text-xs text-muted-foreground">
+                            <span class="truncate max-w-xs sm:max-w-md">{link.url}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+
+          <!-- FR009: Share Funktionalität -->
+          <div class="mt-8 bg-muted rounded-lg p-6">
+            <h3 class="font-medium mb-3">Diese Liste teilen</h3>
+            <div class="flex">
+              <input 
+                type="text" 
+                value={`${Astro.url.origin}/list/${list.slug}`}
+                readonly 
+                class="flex h-10 w-full rounded-l-md border border-input bg-background px-3 py-2 text-sm focus:outline-none"
+                id="shareUrl"
+              />
+              <button 
+                id="copyButton"
+                class="inline-flex h-10 items-center justify-center rounded-r-md border border-l-0 border-input bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              >
+                Kopieren
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+</Layout>
+
+<script>
+  // FR009: Copy-Link-Funktionalität
+  document.addEventListener('DOMContentLoaded', () => {
+    const copyButton = document.getElementById('copyButton');
+    if (copyButton) {
+      copyButton.addEventListener('click', () => {
+        const shareUrl = document.getElementById('shareUrl') as HTMLInputElement;
+        if (shareUrl) {
+          shareUrl.select();
+          navigator.clipboard.writeText(shareUrl.value).then(() => {
+            // Visuelles Feedback
+            const originalText = copyButton.textContent;
+            copyButton.textContent = 'Kopiert!';
+            setTimeout(() => {
+              copyButton.textContent = originalText;
+            }, 2000);
+          });
+        }
+      });
+    }
+  });
+</script>

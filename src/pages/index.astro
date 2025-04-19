@@ -1,11 +1,179 @@
 ---
-import Welcome from '../components/Welcome.astro';
-import Layout from '../layouts/Layout.astro';
+import Layout from "../layouts/Layout.astro";
+import { createList } from "../utils/db.js";
 
-// Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
-// Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
+// Explicitly set this page to server-side rendering to access request headers
+export const prerender = false;
+
+// FR001, FR006, FR007: Verarbeitung der Listenerstellung
+let errorMessage = "";
+let successMessage = "";
+let redirectUrl = "";
+
+// In Astro v5 benötigen wir eine spezielle Verarbeitung für das Formular
+if (Astro.request.method === "POST") {
+  try {
+    // Anstatt formData() zu verwenden, nutzen wir das Request-Objekt direkt
+    const contentType = Astro.request.headers.get("content-type") || "";
+
+    // Behandlung basierend auf dem Content-Type
+    let title, description, customSlug;
+
+    if (contentType.includes("application/x-www-form-urlencoded")) {
+      // URLSearchParams für urlencoded form data
+      const body = await Astro.request.text();
+      const params = new URLSearchParams(body);
+      title = params.get("title") || "Unbenannte Liste";
+      description = params.get("description") || "";
+      customSlug = params.get("slug") || "";
+    } else {
+      // Fallback-Methode, falls Content-Type nicht passt
+      try {
+        const body = await Astro.request.json();
+        title = body.title || "Unbenannte Liste";
+        description = body.description || "";
+        customSlug = body.slug || "";
+      } catch (e) {
+        // Wenn JSON-Parsing fehlschlägt, versuchen wir es mit Standardwerten
+        title = "Unbenannte Liste";
+        description = "";
+        customSlug = "";
+      }
+    }
+
+    // FR007: Automatische Slug-Generierung, wenn keiner angegeben
+    let slug;
+    if (customSlug && customSlug.trim() !== "") {
+      slug = customSlug;
+    } else {
+      const baseSlug = title
+        .toLowerCase()
+        .replace(/[^\w\s-]/g, "")
+        .replace(/\s+/g, "-");
+      const randomSuffix = Math.floor(Math.random() * 1000);
+      slug = `${baseSlug}-${randomSuffix}`;
+    }
+
+    // Liste in der Datenbank erstellen
+    const newList = await createList(title, description, slug);
+
+    // Weiterleitung zur Bearbeitungsseite der neuen Liste
+    return Astro.redirect(`/list/${slug}/edit`);
+  } catch (error: unknown) {
+    console.error("Fehler beim Erstellen der Liste:", error);
+    errorMessage =
+      error instanceof Error
+        ? error.message
+        : "Liste konnte nicht erstellt werden. Bitte versuchen Sie es erneut.";
+  }
+}
 ---
 
 <Layout>
-	<Welcome />
+  <div class="container py-10">
+    <div class="mx-auto max-w-2xl">
+      <div class="text-center mb-8">
+        <h1 class="text-4xl font-bold tracking-tight mb-3">The Urlist</h1>
+        <p class="text-xl text-muted-foreground">
+          Erstellen und teilen Sie Sammlungen von URLs
+        </p>
+      </div>
+
+      {
+        errorMessage && (
+          <div class="mb-6 p-4 rounded-md bg-destructive/15 text-destructive">
+            <p class="font-medium">Fehler</p>
+            <p class="text-sm">{errorMessage}</p>
+          </div>
+        )
+      }
+
+      {
+        successMessage && (
+          <div class="mb-6 p-4 rounded-md bg-green-100 text-green-800">
+            <p class="font-medium">Erfolg</p>
+            <p class="text-sm">{successMessage}</p>
+          </div>
+        )
+      }
+
+      <div class="bg-card rounded-lg border shadow-sm p-6">
+        <h2 class="text-2xl font-semibold mb-6">Neue URL-Liste erstellen</h2>
+
+        <form
+          method="POST"
+          enctype="application/x-www-form-urlencoded"
+          class="space-y-4"
+        >
+          <div class="space-y-2">
+            <label
+              for="title"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Listenname
+            </label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              placeholder="Meine großartige URL-Sammlung"
+              required
+            />
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="description"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Beschreibung (optional)
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows="3"
+              class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+              placeholder="Eine Sammlung nützlicher Ressourcen zum Thema..."
+            ></textarea>
+          </div>
+
+          <div class="space-y-2">
+            <label
+              for="slug"
+              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            >
+              Benutzerdefinierte URL (optional)
+            </label>
+            <div class="flex items-center">
+              <span
+                class="inline-flex items-center h-10 rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground"
+              >
+                urlist.com/
+              </span>
+              <input
+                type="text"
+                id="slug"
+                name="slug"
+                class="flex h-10 w-full rounded-none rounded-r-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
+                placeholder="meine-url-liste"
+              />
+            </div>
+            <p class="text-sm text-muted-foreground">
+              Lassen Sie dieses Feld leer für eine automatisch generierte URL
+            </p>
+          </div>
+
+          <div class="pt-4">
+            <button
+              type="submit"
+              class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
+            >
+              Liste erstellen
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
 </Layout>

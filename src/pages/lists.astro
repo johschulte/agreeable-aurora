@@ -1,0 +1,113 @@
+---
+import Layout from "../layouts/Layout.astro";
+import { getAllLists } from "../utils/db.js";
+
+// FR011: Abrufen aller Listen
+let lists = [];
+let error = null;
+
+try {
+  lists = await getAllLists();
+} catch (e: unknown) {
+  console.error("Fehler beim Abrufen der Listen:", e);
+  error = e instanceof Error ? e.message : "Unbekannter Fehler";
+}
+---
+
+<Layout>
+  <div class="container py-10">
+    <div class="mx-auto max-w-3xl">
+      <div class="flex justify-between items-center mb-8">
+        <h1 class="text-3xl font-bold tracking-tight">Meine URL-Listen</h1>
+        <a
+          href="/"
+          class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+        >
+          Neue Liste erstellen
+        </a>
+      </div>
+
+      {
+        error ? (
+          <div class="p-4 rounded-md bg-destructive/15 text-destructive">
+            <p class="font-medium">Fehler</p>
+            <p class="text-sm">{error}</p>
+          </div>
+        ) : (
+          <>
+            {lists.length === 0 ? (
+              <div class="bg-card rounded-lg border shadow-sm p-10 text-center">
+                <div class="mx-auto h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke-width="1.5"
+                    stroke="currentColor"
+                    class="w-8 h-8 text-muted-foreground"
+                  >
+                    <path
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                      d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
+                    />
+                  </svg>
+                </div>
+                <h2 class="text-xl font-semibold mb-2">
+                  Keine Listen gefunden
+                </h2>
+                <p class="text-muted-foreground mb-4">
+                  Es wurden noch keine URL-Listen erstellt.
+                </p>
+                <a
+                  href="/"
+                  class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  Erste Liste erstellen
+                </a>
+              </div>
+            ) : (
+              <div class="bg-card rounded-lg border shadow-sm overflow-hidden">
+                <ul class="divide-y">
+                  {lists.map((list: any) => (
+                    <li class="p-5 hover:bg-muted/50 transition-colors">
+                      <a href={`/list/${list.slug}`} class="block">
+                        <h2 class="text-lg font-medium mb-1">{list.title}</h2>
+                        {list.description && (
+                          <p class="text-sm text-muted-foreground mb-2">
+                            {list.description}
+                          </p>
+                        )}
+                        <div class="flex items-center justify-between text-xs text-muted-foreground mt-2">
+                          <span>
+                            Erstellt:{" "}
+                            {new Date(list.created_at).toLocaleDateString()}
+                          </span>
+                          <div class="flex items-center space-x-2">
+                            <a
+                              href={`/list/${list.slug}`}
+                              class="text-primary hover:underline"
+                            >
+                              Anzeigen
+                            </a>
+                            <span>•</span>
+                            <a
+                              href={`/list/${list.slug}/edit`}
+                              class="text-primary hover:underline"
+                            >
+                              Bearbeiten
+                            </a>
+                          </div>
+                        </div>
+                      </a>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </>
+        )
+      }
+    </div>
+  </div>
+</Layout>

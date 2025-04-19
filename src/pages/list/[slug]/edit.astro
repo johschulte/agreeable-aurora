@@ -1,0 +1,474 @@
+---
+// Diese Seite wird serverseitig gerendert, nicht statisch
+export const prerender = false;
+
+import Layout from '../../../layouts/Layout.astro';
+import { getListBySlug, addLinkToList, updateLink, deleteLink, updateList, deleteList } from '../../../utils/db.js';
+import { fetchWebsiteMetadata } from '../../../utils/metadata.js';
+
+// FR002, FR004, FR005, FR006, FR012: Bearbeitung einer Liste
+const { slug } = Astro.params;
+
+// Zustände für Formularoperationen
+let list = null;
+let error = null;
+let successMessage = null;
+let formAction = '';
+
+// Versuche, die Liste abzurufen
+try {
+  list = await getListBySlug(slug);
+  
+  if (!list) {
+    error = 'Liste nicht gefunden';
+  }
+} catch (e: unknown) {
+  console.error('Fehler beim Abrufen der Liste:', e);
+  error = e instanceof Error ? e.message : 'Liste konnte nicht geladen werden. Bitte versuchen Sie es später erneut.';
+}
+
+// POST-Anfrage für das Hinzufügen/Bearbeiten/Löschen von Links oder Aktualisieren der Liste
+if (Astro.request.method === 'POST' && list) {
+  try {
+    const formData = await Astro.request.formData();
+    const actionValue = formData.get('action');
+    formAction = actionValue ? actionValue.toString() : '';
+    
+    // Verschiedene Aktionen verarbeiten
+    if (formAction === 'add-link') {
+      // FR002: Einen neuen Link hinzufügen
+      const url = formData.get('url')?.toString() || '';
+      let title = formData.get('title')?.toString() || "";
+      let description = formData.get('description')?.toString() || "";
+      let image = formData.get('image')?.toString() || null;
+      
+      // Wenn keine Beschreibung angegeben wurde, versuche Metadaten abzurufen
+      if (!description || description.trim() === "") {
+        try {
+          const metadata = await fetchWebsiteMetadata(url);
+          
+          // Verwende Metadaten-Titel nur, wenn kein Titel eingegeben wurde
+          if ((!title || title.trim() === "") && metadata.title) {
+            title = metadata.title;
+          }
+          
+          // Verwende Metadaten-Beschreibung
+          if (metadata.description) {
+            description = metadata.description;
+          }
+          
+          // Verwende Metadaten-Bild nur, wenn kein Bild-URL eingegeben wurde
+          if ((!image || image.trim() === "") && metadata.image) {
+            image = metadata.image;
+          }
+        } catch (error) {
+          console.error("Fehler beim Abrufen der Website-Metadaten:", error);
+          // Fehler beim Abrufen der Metadaten ignorieren und mit den vom Benutzer eingegebenen Werten fortfahren
+        }
+      }
+      
+      await addLinkToList(list.id, url, title, description, image);
+      successMessage = "Link erfolgreich hinzugefügt";
+      
+    } else if (formAction === 'edit-link') {
+      // FR004: Einen bestehenden Link bearbeiten
+      const linkIdValue = formData.get('link-id');
+      const linkId = linkIdValue ? parseInt(linkIdValue.toString()) : 0;
+      const url = formData.get('url')?.toString() || '';
+      let title = formData.get('title')?.toString() || '';
+      let description = formData.get('description')?.toString() || '';
+      let image = formData.get('image')?.toString() || null;
+      
+      // Wenn keine Beschreibung angegeben wurde, versuche Metadaten abzurufen
+      if (!description || description.trim() === "") {
+        try {
+          const metadata = await fetchWebsiteMetadata(url);
+          
+          // Verwende Metadaten-Beschreibung
+          if (metadata.description) {
+            description = metadata.description;
+          }
+          
+          // Verwende Metadaten-Bild nur, wenn kein Bild-URL eingegeben wurde
+          if ((!image || image.trim() === "") && metadata.image) {
+            image = metadata.image;
+          }
+        } catch (error) {
+          console.error("Fehler beim Abrufen der Website-Metadaten:", error);
+        }
+      }
+      
+      await updateLink(linkId, url, title, description, image);
+      successMessage = "Link erfolgreich aktualisiert";
+      
+    } else if (formAction === 'delete-link') {
+      // FR005: Einen Link löschen
+      const linkIdValue = formData.get('link-id');
+      const linkId = linkIdValue ? parseInt(linkIdValue.toString()) : 0;
+      await deleteLink(linkId);
+      successMessage = "Link erfolgreich gelöscht";
+      
+    } else if (formAction === 'update-list') {
+      // FR006: Listendetails aktualisieren
+      const title = formData.get('title')?.toString() || '';
+      const description = formData.get('description')?.toString() || '';
+      const newSlug = formData.get('slug')?.toString() || '';
+      
+      await updateList(list.id, title, description, newSlug);
+      
+      // Wenn sich der Slug geändert hat, zur neuen URL weiterleiten
+      if (newSlug !== slug) {
+        return Astro.redirect(`/list/${newSlug}/edit`);
+      }
+      
+      successMessage = "Listendetails erfolgreich aktualisiert";
+      
+    } else if (formAction === 'delete-list') {
+      // FR012: Die gesamte Liste löschen
+      await deleteList(list.id);
+      return Astro.redirect('/');
+    }
+    
+    // Aktualisiere die Listendaten nach Änderungen
+    list = await getListBySlug(slug);
+  } catch (e: unknown) {
+    console.error('Fehler bei der Formularübermittlung:', e);
+    error = e instanceof Error ? e.message : 'Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.';
+  }
+}
+---
+
+<Layout>
+  <div class="container py-10">
+    <div class="mx-auto max-w-3xl">
+      {error ? (
+        <div class="p-4 rounded-md bg-destructive/15 text-destructive">
+          <p class="font-medium">Fehler</p>
+          <p class="text-sm">{error}</p>
+          <a href="/" class="text-primary hover:underline mt-2 inline-block">
+            Zurück zur Startseite
+          </a>
+        </div>
+      ) : (
+        <>
+          {successMessage && (
+            <div class="mb-6 p-4 rounded-md bg-green-100 text-green-800">
+              <p class="font-medium">Erfolg</p>
+              <p class="text-sm">{successMessage}</p>
+            </div>
+          )}
+          
+          <div class="flex justify-between items-start mb-6">
+            <h1 class="text-3xl font-bold tracking-tight">Liste bearbeiten: {list.title}</h1>
+            <div class="flex space-x-2">
+              <a 
+                href={`/list/${list.slug}`}
+                class="inline-flex h-9 items-center justify-center rounded-md bg-secondary px-4 text-sm font-medium text-secondary-foreground shadow hover:bg-secondary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+              >
+                Liste anzeigen
+              </a>
+            </div>
+          </div>
+          
+          <!-- Listeneinstellungen-Bereich -->
+          <div class="bg-card rounded-lg border shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Listeneinstellungen</h2>
+            
+            <form method="POST" enctype="multipart/form-data" class="space-y-4">
+              <input type="hidden" name="action" value="update-list" />
+              
+              <div class="space-y-2">
+                <label for="title" class="text-sm font-medium leading-none">
+                  Listenname
+                </label>
+                <input 
+                  type="text" 
+                  id="title" 
+                  name="title" 
+                  value={list.title}
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  required
+                />
+              </div>
+              
+              <div class="space-y-2">
+                <label for="description" class="text-sm font-medium leading-none">
+                  Beschreibung (Optional)
+                </label>
+                <textarea 
+                  id="description" 
+                  name="description" 
+                  rows="3"
+                  class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >{list.description}</textarea>
+              </div>
+              
+              <div class="space-y-2">
+                <label for="slug" class="text-sm font-medium leading-none">
+                  URL-Slug
+                </label>
+                <div class="flex items-center">
+                  <span class="inline-flex items-center h-10 rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
+                    {Astro.url.origin}/list/
+                  </span>
+                  <input 
+                    type="text" 
+                    id="slug" 
+                    name="slug" 
+                    value={list.slug}
+                    class="flex h-10 w-full rounded-none rounded-r-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    required
+                  />
+                </div>
+              </div>
+              
+              <div class="flex justify-between pt-2">
+                <button 
+                  type="submit"
+                  class="inline-flex h-9 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  Änderungen speichern
+                </button>
+              </div>
+            </form>
+            
+            <!-- Separates Formular für die Löschfunktion -->
+            <form method="POST" class="mt-4">
+              <input type="hidden" name="action" value="delete-list" />
+              <button 
+                type="submit"
+                class="inline-flex h-9 w-full items-center justify-center rounded-md bg-destructive px-4 text-sm font-medium text-destructive-foreground shadow hover:bg-destructive/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                onclick="return confirm('Sind Sie sicher, dass Sie diese Liste löschen möchten? Diese Aktion kann nicht rückgängig gemacht werden.')"
+              >
+                Liste löschen
+              </button>
+            </form>
+          </div>
+          
+          <!-- Link hinzufügen-Bereich -->
+          <div class="bg-card rounded-lg border shadow-sm p-6 mb-6">
+            <h2 class="text-xl font-semibold mb-4">Neuen Link hinzufügen</h2>
+            
+            <form method="POST" enctype="application/x-www-form-urlencoded" class="space-y-4">
+              <input type="hidden" name="action" value="add-link" />
+              
+              <div class="space-y-2">
+                <label for="url" class="text-sm font-medium leading-none">
+                  URL
+                </label>
+                <input 
+                  type="url" 
+                  id="url" 
+                  name="url" 
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  placeholder="https://beispiel.de"
+                  required
+                />
+              </div>
+              
+              <div class="space-y-2">
+                <label for="title" class="text-sm font-medium leading-none">
+                  Titel
+                </label>
+                <input 
+                  type="text" 
+                  id="title" 
+                  name="title" 
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  placeholder="Link-Titel"
+                />
+              </div>
+              
+              <div class="space-y-2">
+                <label for="description" class="text-sm font-medium leading-none">
+                  Beschreibung (Optional)
+                </label>
+                <textarea 
+                  id="description" 
+                  name="description" 
+                  rows="2"
+                  class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  placeholder="Eine kurze Beschreibung dieses Links"
+                ></textarea>
+              </div>
+              
+              <div class="space-y-2">
+                <label for="image" class="text-sm font-medium leading-none">
+                  Bild-URL (Optional)
+                </label>
+                <input 
+                  type="url" 
+                  id="image" 
+                  name="image" 
+                  class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                  placeholder="https://beispiel.de/bild.jpg"
+                />
+              </div>
+              
+              <div>
+                <button 
+                  type="submit"
+                  class="inline-flex h-9 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                >
+                  Link hinzufügen
+                </button>
+              </div>
+            </form>
+          </div>
+          
+          <!-- Bestehende Links verwalten -->
+          <div class="bg-card rounded-lg border shadow-sm p-6">
+            <h2 class="text-xl font-semibold mb-4">Links verwalten</h2>
+            
+            {list.links.length === 0 ? (
+              <div class="py-8 text-center">
+                <div class="mx-auto h-12 w-12 rounded-full bg-muted flex items-center justify-center mb-3">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-muted-foreground">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                  </svg>
+                </div>
+                <p class="text-muted-foreground">Diese Liste enthält noch keine Links.</p>
+                <p class="text-muted-foreground mt-2">Verwenden Sie das Formular oben, um Ihren ersten Link hinzuzufügen.</p>
+              </div>
+            ) : (
+              <ul class="space-y-4">
+                {list.links.map((link) => (
+                  <li class="border rounded-md p-4">
+                    <div class="flex items-start justify-between">
+                      <div class="flex-1 min-w-0 pr-4">
+                        <h3 class="text-lg font-medium text-primary">{link.title}</h3>
+                        {link.description && (
+                          <p class="mt-1 text-sm text-muted-foreground">{link.description}</p>
+                        )}
+                        <a 
+                          href={link.url}
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          class="mt-1 text-xs text-muted-foreground hover:underline truncate block"
+                        >
+                          {link.url}
+                        </a>
+                      </div>
+                      <div class="flex space-x-2">
+                        <button 
+                          class="inline-flex h-8 items-center justify-center rounded-md bg-muted px-3 text-xs font-medium text-muted-foreground shadow-sm hover:bg-muted/80"
+                          data-toggle-edit={`link-${link.id}`}
+                          type="button"
+                        >
+                          Bearbeiten
+                        </button>
+                        <form method="POST" enctype="application/x-www-form-urlencoded" class="inline">
+                          <input type="hidden" name="action" value="delete-link" />
+                          <input type="hidden" name="link-id" value={link.id} />
+                          <button 
+                            type="submit"
+                            class="inline-flex h-8 items-center justify-center rounded-md bg-destructive/10 px-3 text-xs font-medium text-destructive shadow-sm hover:bg-destructive/20"
+                            onclick="return confirm('Sind Sie sicher, dass Sie diesen Link löschen möchten?')"
+                          >
+                            Löschen
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                    
+                    <!-- Bearbeitungsformular (standardmäßig ausgeblendet) -->
+                    <div id={`link-${link.id}`} class="mt-4 border rounded-md p-4 hidden">
+                      <form method="POST" enctype="application/x-www-form-urlencoded" class="space-y-3">
+                        <input type="hidden" name="action" value="edit-link" />
+                        <input type="hidden" name="link-id" value={link.id} />
+                        
+                        <div class="space-y-2">
+                          <label class="text-sm font-medium leading-none">
+                            URL
+                          </label>
+                          <input 
+                            type="url" 
+                            name="url" 
+                            value={link.url}
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            required
+                          />
+                        </div>
+                        
+                        <div class="space-y-2">
+                          <label class="text-sm font-medium leading-none">
+                            Titel
+                          </label>
+                          <input 
+                            type="text" 
+                            name="title" 
+                            value={link.title}
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            required
+                          />
+                        </div>
+                        
+                        <div class="space-y-2">
+                          <label class="text-sm font-medium leading-none">
+                            Beschreibung
+                          </label>
+                          <textarea 
+                            name="description" 
+                            rows="2"
+                            class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          >{link.description}</textarea>
+                        </div>
+                        
+                        <div class="space-y-2">
+                          <label class="text-sm font-medium leading-none">
+                            Bild-URL
+                          </label>
+                          <input 
+                            type="url" 
+                            name="image" 
+                            value={link.image || ""}
+                            class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          />
+                        </div>
+                        
+                        <div class="flex space-x-2">
+                          <button 
+                            type="submit"
+                            class="inline-flex h-8 items-center justify-center rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground shadow hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                          >
+                            Änderungen speichern
+                          </button>
+                          <button 
+                            type="button"
+                            class="inline-flex h-8 items-center justify-center rounded-md bg-secondary px-3 text-xs font-medium text-secondary-foreground shadow hover:bg-secondary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            data-toggle-edit={`link-${link.id}`}
+                          >
+                            Abbrechen
+                          </button>
+                        </div>
+                      </form>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </>
+      )}
+    </div>
+  </div>
+</Layout>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // Bearbeitungsformulare für Links ein-/ausblenden
+    document.querySelectorAll('[data-toggle-edit]').forEach(button => {
+      button.addEventListener('click', () => {
+        const formId = button.getAttribute('data-toggle-edit');
+        const form = document.getElementById(formId);
+        if (form) {
+          if (form.classList.contains('hidden')) {
+            form.classList.remove('hidden');
+          } else {
+            form.classList.add('hidden');
+          }
+        }
+      });
+    });
+  });
+</script>
