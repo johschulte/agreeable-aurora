@@ -8,7 +8,7 @@ export default defineConfig({
     plugins: [tailwindcss()],
   },
   server: {
-    host: '0.0.0.0', // Macht den Server im lokalen Netzwerk verfügbar
+    host: "0.0.0.0", // Macht den Server im lokalen Netzwerk verfügbar
     port: 3000, // Standard-Port, kann nach Bedarf geändert werden
-  }
+  },
 });
