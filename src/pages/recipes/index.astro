@@ -5,8 +5,8 @@ import RecipeCard from "../../components/recipes/RecipeCard.astro";
 import RecipeSearchBar from "../../components/recipes/RecipeSearchBar.astro";
 import { getUserRecipes, getUserTags } from "../../utils/db-recipe.js";
 
-// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
-const userId = "mock-user-id";
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
 
 // Parameter aus URL oder Standard
 const searchTerm = Astro.url.searchParams.get("searchTerm") || "";

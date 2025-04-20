@@ -3,11 +3,14 @@
 import RecipeLayout from "../../layouts/RecipeLayout.astro";
 import { getRecipeById } from "../../utils/db-recipe.js";
 
+// Für serverseitiges Rendering, um dynamisch Rezepte aus der Datenbank zu laden
+export const prerender = false;
+
 // ID aus der URL holen
 const { slug } = Astro.params;
 
-// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
-const userId = "mock-user-id";
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
 
 // Rezeptdaten laden
 let recipe = null;
