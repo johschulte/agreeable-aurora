@@ -207,16 +207,16 @@ if (Astro.request.method === 'POST' && list) {
                 <label for="slug" class="text-sm font-medium leading-none">
                   URL-Slug
                 </label>
-                <div class="flex items-center">
-                  <span class="inline-flex items-center h-10 rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground">
-                    {Astro.url.origin}/list/
+                <div class="flex flex-col sm:flex-row items-stretch sm:items-center">
+                  <span class="inline-flex items-center h-10 rounded-t-md sm:rounded-t-none sm:rounded-l-md border sm:border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap">
+                    <span class="overflow-hidden text-ellipsis">{Astro.url.origin}/list/</span>
                   </span>
                   <input 
                     type="text" 
                     id="slug" 
                     name="slug" 
                     value={list.slug}
-                    class="flex h-10 w-full rounded-none rounded-r-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    class="flex h-10 w-full rounded-b-md sm:rounded-b-none sm:rounded-r-md border border-input sm:border-t-1 bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     required
                   />
                 </div>
