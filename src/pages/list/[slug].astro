@@ -5,6 +5,9 @@ export const prerender = false;
 import Layout from '../../layouts/Layout.astro';
 import { getListBySlug } from '../../utils/db.js';
 
+// Debugging: Ausgabe der Datenbankverbindung (entfernen Sie dies nach dem Test)
+console.log("Verwendete DB_CONNECTION:", process.env.DB_CONNECTION || "Standard-Verbindung wird verwendet");
+
 // FR003, FR010: Anzeigen einer Liste anhand des Slugs
 const { slug } = Astro.params;
 

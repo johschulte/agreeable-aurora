@@ -1,6 +1,6 @@
 ---
 import Layout from "../layouts/Layout.astro";
-import { query, getAllLists } from "../utils/db.js";
+import { getAllLists, supabase } from "../utils/db.js";
 
 // Einfache Datenbankabfrage ausführen
 let dbStatus = "Wird geprüft...";
@@ -8,11 +8,17 @@ let lists = [];
 let error = null;
 
 try {
-  // Verbindung zur Datenbank testen
-  await query("SELECT 1");
+  // Verbindung zur Datenbank mit Supabase testen
+  const { data, error: pingError } = await supabase
+    .from("lists")
+    .select("count")
+    .limit(1);
+
+  if (pingError) throw pingError;
+
   dbStatus = "Verbunden";
 
-  // Listen aus der Datenbank abrufen
+  // Listen aus der Datenbank abrufen (nutzt die neue getAllLists-Funktion, die Supabase verwendet)
   lists = await getAllLists();
 } catch (e) {
   console.error("Datenbankfehler:", e);
