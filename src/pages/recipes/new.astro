@@ -3,6 +3,9 @@
 import RecipeLayout from "../../layouts/RecipeLayout.astro";
 import { getUserTags, createRecipe } from "../../utils/db-recipe.js";
 
+// Markiere diese Seite explizit als serverseitig gerendert
+export const prerender = false;
+
 // Benutzer-ID für den in der Datenbank vorhandenen Benutzer
 const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
 
@@ -22,15 +25,89 @@ try {
 // Formularverarbeitung
 if (Astro.request.method === "POST") {
   try {
-    // Statt formData zu verwenden, lesen wir den Request-Body direkt
-    const body = await Astro.request.text();
+    // Logging der Middleware-Informationen, falls vorhanden
+    if (Astro.locals.formDataParsed !== undefined) {
+      console.log("=== MIDDLEWARE DATEN ===");
+      console.log("Formular erfolgreich geparst:", Astro.locals.formDataParsed);
+      if (Astro.locals.formEntries) {
+        console.log("Formulareinträge aus Middleware:", JSON.stringify(Astro.locals.formEntries, null, 2));
+      }
+      if (Astro.locals.formDataError) {
+        console.log("Fehler beim Parsen:", Astro.locals.formDataError);
+      }
+      console.log("========================");
+    }
 
-    // Detailliertes Logging des Rohformularinhalts
+    // Verwende FormData für die Datenanalyse
+    let formData;
+    
+    // Wenn die Middleware die FormData bereits geparst hat, verwende diese
+    if (Astro.locals.formDataParsed && Astro.locals.formEntries) {
+      console.log("Verwende FormData aus der Middleware");
+      // Erstelle eine neue FormData-Instanz aus den Middleware-Daten
+      formData = new FormData();
+      for (const [key, values] of Object.entries(Astro.locals.formEntries)) {
+        for (const value of values) {
+          formData.append(key, value);
+        }
+      }
+    } 
+    // Versuche Daten manuell aus der Middleware zu verwenden
+    else if (Astro.locals.manualFormEntries) {
+      console.log("Verwende manuell geparste Daten aus der Middleware");
+      // Erstelle ein FormData-ähnliches Objekt
+      formData = {
+        _entries: Astro.locals.manualFormEntries,
+        get: function(key) {
+          return this._entries[key] ? this._entries[key][0] : null;
+        },
+        getAll: function(key) {
+          return this._entries[key] || [];
+        },
+        entries: function*() {
+          for (const [key, values] of Object.entries(this._entries)) {
+            for (const value of values) {
+              yield [key, value];
+            }
+          }
+        }
+      };
+    }
+    // Fallback: Versuche, die Daten direkt aus der Anfrage zu lesen
+    else {
+      console.log("Versuche, FormData direkt aus der Anfrage zu lesen");
+      try {
+        formData = await Astro.request.formData();
+      } catch (e) {
+        console.error("Fehler beim direkten Lesen der FormData:", e.message);
+        
+        // Versuche es als letzten Ausweg mit Text/URLSearchParams
+        const text = await Astro.request.text();
+        console.log("Roher Text der Anfrage:", text);
+        const params = new URLSearchParams(text);
+        
+        // Erstelle ein FormData-ähnliches Objekt
+        formData = {
+          _params: params,
+          get: function(key) {
+            return this._params.get(key);
+          },
+          getAll: function(key) {
+            return this._params.getAll(key);
+          },
+          entries: function*() {
+            for (const entry of this._params.entries()) {
+              yield entry;
+            }
+          }
+        };
+      }
+    }
+    
+    // Detailliertes Logging des Formulars
     console.log("=== FORMULAR ROHDATEN ===");
-    console.log(body);
+    console.log("FormData-Objekt erstellt");
     console.log("========================");
-
-    const formData = new URLSearchParams(body);
 
     // Logging aller Form-Felder für bessere Übersicht
     console.log("=== FORMULAR FELDER ===");
@@ -242,6 +319,7 @@ if (Astro.request.method === "POST") {
 
   <form
     method="POST"
+    enctype="application/x-www-form-urlencoded"
     class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
   >
     <!-- Basisdaten -->
