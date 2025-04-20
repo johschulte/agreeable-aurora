@@ -28,11 +28,6 @@ const supabaseKey = process.env.SUPABASE_KEY
   ? process.env.SUPABASE_KEY.trim()
   : "";
 
-// Debug-Log für API-Schlüssel
-console.log("Supabase URL:", supabaseUrl);
-console.log("Supabase Key Länge:", supabaseKey.length);
-console.log("Supabase Key Anfang:", supabaseKey.substring(0, 10) + "...");
-
 export const supabase = createClient(supabaseUrl, supabaseKey);
 
 // Originaler PostgreSQL-Pool als Fallback
