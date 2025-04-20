@@ -273,13 +273,16 @@ if (Astro.request.method === 'POST' && list) {
                   URL
                 </label>
                 <input 
-                  type="url" 
+                  type="text" 
                   id="url" 
                   name="url" 
                   class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  placeholder="https://beispiel.de"
+                  placeholder="google.com oder https://beispiel.de"
                   required
                 />
+                <p class="text-xs text-muted-foreground">
+                  Sie können einfach "domain.com" eingeben, "https://" wird automatisch hinzugefügt.
+                </p>
               </div>
               
               <div class="space-y-2">
@@ -313,12 +316,15 @@ if (Astro.request.method === 'POST' && list) {
                   Bild-URL (Optional)
                 </label>
                 <input 
-                  type="url" 
+                  type="text" 
                   id="image" 
                   name="image" 
                   class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                  placeholder="https://beispiel.de/bild.jpg"
+                  placeholder="beispiel.de/bild.jpg"
                 />
+                <p class="text-xs text-muted-foreground">
+                  "https://" wird bei Bedarf automatisch hinzugefügt.
+                </p>
               </div>
               
               <div>
@@ -398,12 +404,15 @@ if (Astro.request.method === 'POST' && list) {
                             URL
                           </label>
                           <input 
-                            type="url" 
+                            type="text" 
                             name="url" 
                             value={link.url}
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                             required
                           />
+                          <p class="text-xs text-muted-foreground">
+                            "https://" wird bei Bedarf automatisch hinzugefügt.
+                          </p>
                         </div>
                         
                         <div class="space-y-2">
@@ -435,11 +444,15 @@ if (Astro.request.method === 'POST' && list) {
                             Bild-URL
                           </label>
                           <input 
-                            type="url" 
+                            type="text" 
                             name="image" 
                             value={link.image || ""}
                             class="flex h-9 w-full rounded-md border border-input bg-background px-3 py-2 text-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            placeholder="beispiel.de/bild.jpg"
                           />
+                          <p class="text-xs text-muted-foreground">
+                            "https://" wird bei Bedarf automatisch hinzugefügt.
+                          </p>
                         </div>
                         
                         <div class="flex space-x-2">
