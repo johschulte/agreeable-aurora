@@ -4,7 +4,7 @@ import RecipeLayout from "../layouts/RecipeLayout.astro";
 import { getUserRecipes, getUserTags } from "../utils/db-recipe.js";
 
 // Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
-const userId = "mock-user-id";
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98";
 
 // Lade ein paar Demo-Rezepte für die Startseite
 let recentRecipes = [];
@@ -63,10 +63,10 @@ const features = [
   <!-- Hero-Sektion -->
   <section class="py-10 mb-12">
     <div class="max-w-4xl mx-auto text-center">
-      <h1 class="text-4xl font-bold text-gray-900 mb-4">
+      <h1 class="text-4xl font-bold text-gray-900 dark:text-gray-100 mb-4">
         Deine digitale Rezeptsammlung
       </h1>
-      <p class="text-xl text-gray-600 mb-8">
+      <p class="text-xl text-gray-600 dark:text-gray-400 mb-8">
         Sammle, plane und organisiere deine Lieblingsrezepte an einem Ort
       </p>
       <div class="flex justify-center gap-4">
@@ -78,7 +78,7 @@ const features = [
         </a>
         <a
           href="/recipes"
-          class="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+          class="px-6 py-3 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
           Meine Rezepte ansehen
         </a>
@@ -87,21 +87,33 @@ const features = [
   </section>
 
   <!-- Features-Sektion -->
-  <section class="py-8 bg-gray-50 rounded-xl mb-12">
+  <section class="py-8 bg-gray-50 dark:bg-gray-800 rounded-xl mb-12">
     <div class="max-w-6xl mx-auto px-4">
-      <h2 class="text-2xl font-bold text-center text-gray-900 mb-8">
+      <h2
+        class="text-2xl font-bold text-center text-gray-900 dark:text-gray-100 mb-8"
+      >
         Alles für deine Küchenplanung
       </h2>
       <div class="grid md:grid-cols-3 gap-8">
         {
           features.map((feature) => (
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-              <div class="mb-4" set:html={feature.icon} />
-              <h3 class="text-lg font-semibold mb-2">{feature.title}</h3>
-              <p class="text-gray-600 mb-4">{feature.description}</p>
+            <div class="bg-white dark:bg-gray-700 p-6 rounded-lg shadow-sm">
+              <div
+                class="mb-4"
+                set:html={feature.icon.replace(
+                  "text-emerald-600",
+                  "text-emerald-600 dark:text-emerald-500"
+                )}
+              />
+              <h3 class="text-lg font-semibold mb-2 dark:text-gray-100">
+                {feature.title}
+              </h3>
+              <p class="text-gray-600 dark:text-gray-300 mb-4">
+                {feature.description}
+              </p>
               <a
                 href={feature.link}
-                class="text-emerald-600 hover:text-emerald-700 font-medium flex items-center"
+                class="text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 font-medium flex items-center"
               >
                 Mehr erfahren
                 <svg
@@ -127,10 +139,12 @@ const features = [
   <!-- Aktuelle Rezepte -->
   <section class="py-8 mb-12">
     <div class="flex justify-between items-center mb-6">
-      <h2 class="text-2xl font-bold text-gray-900">Deine neuesten Rezepte</h2>
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Deine neuesten Rezepte
+      </h2>
       <a
         href="/recipes"
-        class="text-emerald-600 hover:text-emerald-700 font-medium flex items-center"
+        class="text-emerald-600 dark:text-emerald-500 hover:text-emerald-700 dark:hover:text-emerald-400 font-medium flex items-center"
       >
         Alle anzeigen
         <svg
@@ -149,7 +163,7 @@ const features = [
 
     {
       errorMessage ? (
-        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+        <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
           {errorMessage}
         </div>
       ) : recentRecipes.length > 0 ? (
@@ -157,7 +171,7 @@ const features = [
           {recentRecipes.map((recipe) => (
             <a
               href={`/recipes/${recipe.id}`}
-              class="bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow"
+              class="bg-white dark:bg-gray-700 rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow"
             >
               <div class="relative h-40">
                 <img
@@ -166,21 +180,23 @@ const features = [
                   class="w-full h-full object-cover"
                 />
                 {recipe.rating && (
-                  <div class="absolute top-2 right-2 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md text-xs font-medium">
+                  <div class="absolute top-2 right-2 bg-yellow-100 dark:bg-yellow-800/60 text-yellow-800 dark:text-yellow-200 px-2 py-1 rounded-md text-xs font-medium">
                     {recipe.rating} ★
                   </div>
                 )}
               </div>
               <div class="p-4">
-                <h3 class="font-medium mb-1 line-clamp-1">{recipe.title}</h3>
+                <h3 class="font-medium mb-1 line-clamp-1 dark:text-gray-100">
+                  {recipe.title}
+                </h3>
                 {recipe.description && (
-                  <p class="text-gray-600 text-sm mb-2 line-clamp-2">
+                  <p class="text-gray-600 dark:text-gray-300 text-sm mb-2 line-clamp-2">
                     {recipe.description}
                   </p>
                 )}
 
                 {recipe.prep_time_minutes && recipe.cook_time_minutes && (
-                  <div class="text-gray-500 text-xs">
+                  <div class="text-gray-500 dark:text-gray-400 text-xs">
                     {recipe.prep_time_minutes + recipe.cook_time_minutes} Min.
                   </div>
                 )}
@@ -189,8 +205,8 @@ const features = [
           ))}
         </div>
       ) : (
-        <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-          <p class="text-gray-600 mb-4">
+        <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
+          <p class="text-gray-600 dark:text-gray-300 mb-4">
             Du hast noch keine Rezepte in deiner Sammlung.
           </p>
           <a
@@ -205,25 +221,25 @@ const features = [
   </section>
 
   <!-- Schnellstart-Sektion -->
-  <section class="py-8 bg-emerald-50 rounded-xl">
+  <section class="py-8 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl">
     <div class="max-w-4xl mx-auto px-4 text-center">
-      <h2 class="text-2xl font-bold text-gray-900 mb-4">
+      <h2 class="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
         Starte mit deiner Rezeptverwaltung
       </h2>
-      <p class="text-gray-600 mb-6">
+      <p class="text-gray-600 dark:text-gray-300 mb-6">
         Importiere Rezepte von Webseiten, lade PDF-Dokumente hoch oder erstelle
         deine eigenen Rezepte
       </p>
       <div class="flex flex-col sm:flex-row justify-center gap-4">
         <a
           href="/recipes/import-url"
-          class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+          class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="currentColor"
-            class="w-5 h-5 mr-2 text-emerald-600"
+            class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-500"
           >
             <path
               fill-rule="evenodd"
@@ -234,13 +250,13 @@ const features = [
         </a>
         <a
           href="/recipes/import-pdf"
-          class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+          class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="currentColor"
-            class="w-5 h-5 mr-2 text-emerald-600"
+            class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-500"
           >
             <path
               fill-rule="evenodd"

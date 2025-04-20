@@ -12,7 +12,7 @@ const user = {
 ---
 
 <!doctype html>
-<html lang="de">
+<html lang="de" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -23,32 +23,37 @@ const user = {
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>{title} | RecipeApp</title>
   </head>
-  <body class="min-h-screen bg-gray-50">
-    <header class="bg-white shadow">
+  <body
+    class="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100"
+  >
+    <header class="bg-white dark:bg-gray-800 shadow dark:shadow-gray-700/20">
       <div class="container mx-auto px-4 py-4">
         <div class="flex justify-between items-center">
           <a href="/" class="flex items-center space-x-2">
-            <span class="text-2xl font-bold text-emerald-600">RecipeApp</span>
+            <span
+              class="text-2xl font-bold text-emerald-600 dark:text-emerald-500"
+              >RecipeApp</span
+            >
           </a>
           <nav class="flex items-center space-x-6">
             <a
               href="/recipes"
-              class="font-medium text-gray-700 hover:text-emerald-600"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500"
               >Rezepte</a
             >
             <a
               href="/meal-plans"
-              class="font-medium text-gray-700 hover:text-emerald-600"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500"
               >Speisepläne</a
             >
             <a
               href="/shopping-lists"
-              class="font-medium text-gray-700 hover:text-emerald-600"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500"
               >Einkaufslisten</a
             >
           </nav>
           <div class="flex items-center space-x-4">
-            <div class="text-sm text-gray-700">
+            <div class="text-sm text-gray-700 dark:text-gray-300">
               <span>Hallo, {user.name}</span>
             </div>
           </div>
@@ -60,13 +65,13 @@ const user = {
       <slot />
     </main>
 
-    <footer class="bg-gray-100 py-6 mt-12">
+    <footer class="bg-gray-100 dark:bg-gray-800 py-6 mt-12">
       <div class="container mx-auto px-4">
         <div class="flex justify-between items-center">
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             &copy; {new Date().getFullYear()} RecipeApp
           </div>
-          <div class="text-sm text-gray-500">
+          <div class="text-sm text-gray-500 dark:text-gray-400">
             <a href="#" class="hover:underline">Datenschutz</a>
             <span class="px-2">|</span>
             <a href="#" class="hover:underline">Impressum</a>

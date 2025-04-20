@@ -72,17 +72,19 @@ const hasActiveFilters =
 
 <RecipeLayout title="Meine Rezepte">
   <div class="mb-6 flex justify-between items-center">
-    <h1 class="text-2xl font-bold text-gray-900">Meine Rezepte</h1>
+    <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+      Meine Rezepte
+    </h1>
     <div class="flex space-x-3">
       <a
         href="/recipes/import-url"
-        class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center"
+        class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
           viewBox="0 0 24 24"
           fill="currentColor"
-          class="w-5 h-5 mr-2 text-emerald-600"
+          class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-500"
         >
           <path
             fill-rule="evenodd"
@@ -121,7 +123,7 @@ const hasActiveFilters =
 
   {
     errorMessage ? (
-      <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+      <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
         {errorMessage}
       </div>
     ) : recipes.length > 0 ? (
@@ -131,32 +133,32 @@ const hasActiveFilters =
         ))}
       </div>
     ) : hasActiveFilters ? (
-      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-        <p class="text-gray-600 mb-4">
+      <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
           Keine Rezepte gefunden, die deinen Filterkriterien entsprechen.
         </p>
         <a
           href="/recipes"
-          class="inline-block px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+          class="inline-block px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
         >
           Filter zurücksetzen
         </a>
       </div>
     ) : (
-      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
-        <p class="text-gray-600 mb-4">
+      <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
           Du hast noch keine Rezepte in deiner Sammlung.
         </p>
         <div class="flex flex-col sm:flex-row justify-center gap-4">
           <a
             href="/recipes/import-url"
-            class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+            class="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-md hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors flex items-center justify-center"
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
               fill="currentColor"
-              class="w-5 h-5 mr-2 text-emerald-600"
+              class="w-5 h-5 mr-2 text-emerald-600 dark:text-emerald-500"
             >
               <path
                 fill-rule="evenodd"

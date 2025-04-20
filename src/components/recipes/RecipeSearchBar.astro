@@ -6,7 +6,7 @@
 const { availableTags = [] } = Astro.props;
 ---
 
-<div class="mb-8 bg-white rounded-lg shadow-sm p-4">
+<div class="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
   <form id="searchForm" class="space-y-4">
     <!-- Suchfeld -->
     <div>
@@ -16,7 +16,7 @@ const { availableTags = [] } = Astro.props;
           id="searchQuery"
           name="q"
           placeholder="Nach Rezepten oder Zutaten suchen..."
-          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+          class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         />
         <div
           class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
@@ -25,7 +25,7 @@ const { availableTags = [] } = Astro.props;
             xmlns="http://www.w3.org/2000/svg"
             viewBox="0 0 24 24"
             fill="currentColor"
-            class="w-5 h-5 text-gray-400"
+            class="w-5 h-5 text-gray-400 dark:text-gray-500"
           >
             <path
               fill-rule="evenodd"
@@ -36,7 +36,7 @@ const { availableTags = [] } = Astro.props;
         <button
           type="button"
           id="clearSearch"
-          class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden"
+          class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hidden"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -59,13 +59,13 @@ const { availableTags = [] } = Astro.props;
       <div class="w-full md:w-auto">
         <label
           for="timeFilter"
-          class="block text-sm font-medium text-gray-700 mb-1"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >Zubereitungszeit</label
         >
         <select
           id="timeFilter"
           name="time"
-          class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+          class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         >
           <option value="">Alle Zeiten</option>
           <option value="15">Unter 15 Minuten</option>
@@ -82,7 +82,7 @@ const { availableTags = [] } = Astro.props;
           <div class="w-full md:w-auto flex-grow">
             <label
               for="tagFilter"
-              class="block text-sm font-medium text-gray-700 mb-1"
+              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
             >
               Tags
             </label>
@@ -90,7 +90,7 @@ const { availableTags = [] } = Astro.props;
               <select
                 id="tagFilter"
                 name="tag"
-                class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+                class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
               >
                 <option value="">Alle Tags</option>
                 {availableTags.map((tag) => (
@@ -106,13 +106,13 @@ const { availableTags = [] } = Astro.props;
       <div class="w-full md:w-auto">
         <label
           for="sortOption"
-          class="block text-sm font-medium text-gray-700 mb-1"
+          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
           >Sortieren nach</label
         >
         <select
           id="sortOption"
           name="sort"
-          class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+          class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         >
           <option value="newest">Neueste zuerst</option>
           <option value="oldest">Älteste zuerst</option>
@@ -214,12 +214,12 @@ const { availableTags = [] } = Astro.props;
     function addFilterTag(text, type) {
       const tag = document.createElement("div");
       tag.className =
-        "inline-flex items-center bg-emerald-50 text-emerald-800 rounded-full px-3 py-1 text-sm";
+        "inline-flex items-center bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 rounded-full px-3 py-1 text-sm";
       tag.dataset.filterType = type;
 
       tag.innerHTML = `
         ${text}
-        <button type="button" class="ml-1 text-emerald-600 hover:text-emerald-800 focus:outline-none">
+        <button type="button" class="ml-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 focus:outline-none">
           <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
             <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
           </svg>
