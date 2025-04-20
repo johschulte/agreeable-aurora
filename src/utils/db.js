@@ -6,9 +6,27 @@ import { createClient } from "@supabase/supabase-js";
 // Lade Umgebungsvariablen aus der .env-Datei
 dotenv.config();
 
+// URL-Hilfsfunktion: Stellt sicher, dass eine URL mit http:// oder https:// beginnt
+export function normalizeUrl(url) {
+  if (!url) return url;
+
+  // Entferne führende und abschließende Leerzeichen
+  const trimmedUrl = url.trim();
+
+  // Prüfe, ob die URL bereits mit http:// oder https:// beginnt
+  if (trimmedUrl.startsWith("http://") || trimmedUrl.startsWith("https://")) {
+    return trimmedUrl;
+  }
+
+  // Füge standardmäßig https:// hinzu
+  return `https://${trimmedUrl}`;
+}
+
 // Supabase Client initialisieren
 const supabaseUrl = "https://vanrftomepwvzrhtbnzq.supabase.co";
-const supabaseKey = process.env.SUPABASE_KEY ? process.env.SUPABASE_KEY.trim() : "";
+const supabaseKey = process.env.SUPABASE_KEY
+  ? process.env.SUPABASE_KEY.trim()
+  : "";
 
 // Debug-Log für API-Schlüssel
 console.log("Supabase URL:", supabaseUrl);
@@ -175,31 +193,36 @@ export async function addLinkToList(
   try {
     // Bestimme die höchste Position in der Liste mit Supabase
     const { data: positionData, error: positionError } = await supabase
-      .from('links')
-      .select('position')
-      .eq('list_id', listId)
-      .order('position', { ascending: false })
+      .from("links")
+      .select("position")
+      .eq("list_id", listId)
+      .order("position", { ascending: false })
       .limit(1);
-    
+
     if (positionError) throw positionError;
-    
+
     // Bestimme die nächste Position
-    const position = positionData && positionData.length > 0 ? positionData[0].position + 1 : 0;
-    
+    const position =
+      positionData && positionData.length > 0
+        ? positionData[0].position + 1
+        : 0;
+
     // Füge den Link mit Supabase hinzu
     const { data, error } = await supabase
-      .from('links')
-      .insert([{ 
-        list_id: listId, 
-        url, 
-        title, 
-        description, 
-        image,
-        position
-      }])
+      .from("links")
+      .insert([
+        {
+          list_id: listId,
+          url,
+          title,
+          description,
+          image,
+          position,
+        },
+      ])
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -236,12 +259,12 @@ export async function updateLink(id, url, title, description, image = null) {
   try {
     // Verwende Supabase für das Update
     const { data, error } = await supabase
-      .from('links')
+      .from("links")
       .update({ url, title, description, image, updated_at: new Date() })
-      .eq('id', id)
+      .eq("id", id)
       .select()
       .single();
-    
+
     if (error) throw error;
     return data;
   } catch (error) {
@@ -258,11 +281,8 @@ export async function updateLink(id, url, title, description, image = null) {
 export async function deleteLink(id) {
   try {
     // Verwende Supabase zum Löschen
-    const { error } = await supabase
-      .from('links')
-      .delete()
-      .eq('id', id);
-    
+    const { error } = await supabase.from("links").delete().eq("id", id);
+
     if (error) throw error;
     return true;
   } catch (error) {
@@ -277,46 +297,49 @@ export async function updateLinkPosition(id, newPosition) {
   try {
     // Zuerst Link-Informationen mit Supabase abrufen
     const { data: linkData, error: linkError } = await supabase
-      .from('links')
-      .select('list_id')
-      .eq('id', id)
+      .from("links")
+      .select("list_id")
+      .eq("id", id)
       .single();
-    
+
     if (linkError) throw linkError;
     if (!linkData) throw new Error("Link not found");
-    
+
     const listId = linkData.list_id;
-    
+
     // Position des Links aktualisieren
     const { error: updateError } = await supabase
-      .from('links')
+      .from("links")
       .update({ position: newPosition, updated_at: new Date() })
-      .eq('id', id);
-    
+      .eq("id", id);
+
     if (updateError) throw updateError;
-    
+
     // Alle Links in der Liste abrufen
     const { data: allLinks, error: allLinksError } = await supabase
-      .from('links')
-      .select('id')
-      .eq('list_id', listId)
-      .order('position', { ascending: true });
-    
+      .from("links")
+      .select("id")
+      .eq("list_id", listId)
+      .order("position", { ascending: true });
+
     if (allLinksError) throw allLinksError;
-    
+
     // Positionen normalisieren
     for (let i = 0; i < allLinks.length; i++) {
       const { error: posError } = await supabase
-        .from('links')
+        .from("links")
         .update({ position: i })
-        .eq('id', allLinks[i].id);
-      
+        .eq("id", allLinks[i].id);
+
       if (posError) throw posError;
     }
-    
+
     return true;
   } catch (error) {
-    console.error("Fehler beim Aktualisieren der Link-Position mit Supabase:", error);
+    console.error(
+      "Fehler beim Aktualisieren der Link-Position mit Supabase:",
+      error
+    );
     // Fallback zur alten Methode
     return updateLinkPositionFallback(id, newPosition);
   }

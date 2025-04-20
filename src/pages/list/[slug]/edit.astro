@@ -3,7 +3,7 @@
 export const prerender = false;
 
 import Layout from '../../../layouts/Layout.astro';
-import { getListBySlug, addLinkToList, updateLink, deleteLink, updateList, deleteList } from '../../../utils/db.js';
+import { getListBySlug, addLinkToList, updateLink, deleteLink, updateList, deleteList, normalizeUrl } from '../../../utils/db.js';
 import { fetchWebsiteMetadata } from '../../../utils/metadata.js';
 
 // FR002, FR004, FR005, FR006, FR012: Bearbeitung einer Liste
@@ -37,10 +37,18 @@ if (Astro.request.method === 'POST' && list) {
     // Verschiedene Aktionen verarbeiten
     if (formAction === 'add-link') {
       // FR002: Einen neuen Link hinzufügen
-      const url = formData.get('url')?.toString() || '';
+      let url = formData.get('url')?.toString() || '';
+      // Stelle sicher, dass die URL das richtige Format hat (fügt https:// hinzu, wenn nötig)
+      url = normalizeUrl(url);
+      
       let title = formData.get('title')?.toString() || "";
       let description = formData.get('description')?.toString() || "";
       let image = formData.get('image')?.toString() || null;
+      
+      // Wenn Bild-URL angegeben, normalisiere auch diese
+      if (image) {
+        image = normalizeUrl(image);
+      }
       
       // Wenn keine Beschreibung angegeben wurde, versuche Metadaten abzurufen
       if (!description || description.trim() === "") {
@@ -74,10 +82,18 @@ if (Astro.request.method === 'POST' && list) {
       // FR004: Einen bestehenden Link bearbeiten
       const linkIdValue = formData.get('link-id');
       const linkId = linkIdValue ? parseInt(linkIdValue.toString()) : 0;
-      const url = formData.get('url')?.toString() || '';
+      let url = formData.get('url')?.toString() || '';
+      // Stelle sicher, dass die URL das richtige Format hat (fügt https:// hinzu, wenn nötig)
+      url = normalizeUrl(url);
+      
       let title = formData.get('title')?.toString() || '';
       let description = formData.get('description')?.toString() || '';
       let image = formData.get('image')?.toString() || null;
+      
+      // Wenn Bild-URL angegeben, normalisiere auch diese
+      if (image) {
+        image = normalizeUrl(image);
+      }
       
       // Wenn keine Beschreibung angegeben wurde, versuche Metadaten abzurufen
       if (!description || description.trim() === "") {
