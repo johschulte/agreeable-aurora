@@ -1,0 +1,322 @@
+---
+// Detailansicht eines einzelnen Rezepts (FR004)
+import RecipeLayout from "../../layouts/RecipeLayout.astro";
+import { getRecipeById } from "../../utils/db-recipe.js";
+
+// ID aus der URL holen
+const { slug } = Astro.params;
+
+// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
+const userId = "mock-user-id";
+
+// Rezeptdaten laden
+let recipe = null;
+let errorMessage = null;
+
+try {
+  if (slug) {
+    recipe = await getRecipeById(slug, userId);
+  }
+  
+  if (!recipe) {
+    errorMessage = "Rezept nicht gefunden.";
+  }
+} catch (error) {
+  console.error("Fehler beim Laden des Rezepts:", error);
+  errorMessage = "Es gab ein Problem beim Laden des Rezepts. Bitte versuche es später erneut.";
+}
+
+// Berechne die Gesamtzeit
+const totalTime = recipe ? (recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0) : 0;
+
+// Formatiere die Zeit für die Anzeige
+function formatTime(minutes) {
+  if (!minutes) return null;
+  
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  
+  if (hours > 0) {
+    return `${hours} Std. ${mins > 0 ? `${mins} Min.` : ''}`;
+  } else {
+    return `${mins} Min.`;
+  }
+}
+
+// Extrahiere Tags für die Anzeige
+const tags = recipe?.recipe_tags?.map(tag => tag.tags) || [];
+---
+
+<RecipeLayout title={recipe ? recipe.title : "Rezept nicht gefunden"}>
+  {errorMessage ? (
+    <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md mb-6">
+      <p>{errorMessage}</p>
+      <a href="/recipes" class="text-red-700 underline mt-2 inline-block">Zurück zur Rezeptübersicht</a>
+    </div>
+  ) : (
+    <div>
+      <!-- Navigation und Aktionen -->
+      <div class="mb-6 flex justify-between items-center">
+        <a href="/recipes" class="text-emerald-600 hover:text-emerald-700 flex items-center">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-1">
+            <path fill-rule="evenodd" d="M7.72 12.53a.75.75 0 010-1.06l7.5-7.5a.75.75 0 111.06 1.06L9.31 12l6.97 6.97a.75.75 0 11-1.06 1.06l-7.5-7.5z" clip-rule="evenodd" />
+          </svg>
+          Alle Rezepte
+        </a>
+        
+        <div class="flex space-x-3">
+          <a 
+            href={`/recipes/${recipe.id}/edit`}
+            class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-2 text-emerald-600">
+              <path d="M21.731 2.269a2.625 2.625 0 00-3.712 0l-1.157 1.157 3.712 3.712 1.157-1.157a2.625 2.625 0 000-3.712zM19.513 8.199l-3.712-3.712-8.4 8.4a5.25 5.25 0 00-1.32 2.214l-.8 2.685a.75.75 0 00.933.933l2.685-.8a5.25 5.25 0 002.214-1.32l8.4-8.4z" />
+              <path d="M5.25 5.25a3 3 0 00-3 3v10.5a3 3 0 003 3h10.5a3 3 0 003-3V13.5a.75.75 0 00-1.5 0v5.25a1.5 1.5 0 01-1.5 1.5H5.25a1.5 1.5 0 01-1.5-1.5V8.25a1.5 1.5 0 011.5-1.5h5.25a.75.75 0 000-1.5H5.25z" />
+            </svg>
+            Bearbeiten
+          </a>
+          <button 
+            id="addToMealPlanButton"
+            class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5 mr-2">
+              <path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clip-rule="evenodd" />
+            </svg>
+            Zum Speiseplan
+          </button>
+        </div>
+      </div>
+
+      <!-- Rezeptinhalt -->
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+        <!-- Linke Spalte: Bild, Info -->
+        <div class="md:col-span-1">
+          <div class="bg-white rounded-lg overflow-hidden shadow-sm mb-6">
+            <img 
+              src={recipe.image_path || "/images/recipe-placeholder.jpg"} 
+              alt={recipe.title} 
+              class="w-full aspect-[4/3] object-cover"
+            />
+          </div>
+          
+          <div class="bg-white rounded-lg shadow-sm p-5 space-y-4">
+            <h3 class="font-medium text-gray-900 border-b pb-2">Details</h3>
+            
+            <div class="flex justify-between">
+              <span class="text-gray-600">Zubereitungszeit:</span>
+              <span class="font-medium">{formatTime(recipe.prep_time_minutes) || "–"}</span>
+            </div>
+            
+            <div class="flex justify-between">
+              <span class="text-gray-600">Kochzeit:</span>
+              <span class="font-medium">{formatTime(recipe.cook_time_minutes) || "–"}</span>
+            </div>
+            
+            <div class="flex justify-between">
+              <span class="text-gray-600">Gesamtzeit:</span>
+              <span class="font-medium">{formatTime(totalTime) || "–"}</span>
+            </div>
+            
+            <div class="flex justify-between">
+              <span class="text-gray-600">Portionen:</span>
+              <span class="font-medium">{recipe.servings || "–"}</span>
+            </div>
+            
+            {recipe.source_url && (
+              <div class="pt-2 border-t">
+                <span class="text-gray-600 block mb-1">Quelle:</span>
+                <a href={recipe.source_url} target="_blank" rel="noopener noreferrer" class="text-emerald-600 hover:text-emerald-700 break-all">
+                  {new URL(recipe.source_url).hostname}
+                </a>
+              </div>
+            )}
+            
+            {tags.length > 0 && (
+              <div class="pt-2 border-t">
+                <span class="text-gray-600 block mb-2">Tags:</span>
+                <div class="flex flex-wrap gap-2">
+                  {tags.map(tag => (
+                    <span class="bg-gray-100 text-gray-700 px-2 py-1 rounded-full text-xs">
+                      {tag.name}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        
+        <!-- Rechte Spalte: Titel, Beschreibung, Zutaten, Anleitung -->
+        <div class="md:col-span-2 space-y-6">
+          <div>
+            <h1 class="text-3xl font-bold text-gray-900 mb-3">{recipe.title}</h1>
+            
+            {recipe.description && (
+              <p class="text-gray-600">{recipe.description}</p>
+            )}
+          </div>
+          
+          <!-- Zutaten -->
+          <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Zutaten</h2>
+            
+            <div class="flex justify-between items-center mb-4">
+              <div class="flex items-center">
+                <span class="text-gray-600 mr-2">Portionen:</span>
+                <div class="flex border rounded overflow-hidden">
+                  <button
+                    type="button"
+                    id="decreaseServings"
+                    class="px-3 py-1 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    -
+                  </button>
+                  <span id="servingsCount" class="px-3 py-1 border-x">{recipe.servings}</span>
+                  <button
+                    type="button"
+                    id="increaseServings"
+                    class="px-3 py-1 bg-gray-100 hover:bg-gray-200 transition-colors"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+              
+              <button
+                type="button"
+                id="addToShoppingList"
+                class="px-3 py-1.5 border border-emerald-600 text-emerald-600 rounded hover:bg-emerald-50 transition-colors text-sm flex items-center"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4 mr-1">
+                  <path d="M2.25 2.25a.75.75 0 000 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 00-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 000-1.5H5.378A2.25 2.25 0 017.5 15h11.218a.75.75 0 00.674-.421 60.358 60.358 0 002.96-7.228.75.75 0 00-.525-.965A60.864 60.864 0 005.68 4.509l-.232-.867A1.875 1.875 0 003.636 2.25H2.25zM3.75 20.25a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM16.5 20.25a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z" />
+                </svg>
+                Zur Einkaufsliste
+              </button>
+            </div>
+            
+            <ul class="space-y-2 border-t pt-4">
+              {recipe.ingredients?.length > 0 ? (
+                recipe.ingredients.map(ingredient => (
+                  <li class="flex">
+                    <span class="w-24 text-gray-700">
+                      {ingredient.quantity ? (
+                        <span class="ingredient-quantity" data-original={ingredient.quantity}>
+                          {ingredient.quantity}
+                        </span>
+                      ) : ""}
+                      {ingredient.unit ? ` ${ingredient.unit}` : ""}
+                    </span>
+                    <span>{ingredient.name}</span>
+                  </li>
+                ))
+              ) : (
+                <li class="text-gray-500">Keine Zutaten vorhanden</li>
+              )}
+            </ul>
+          </div>
+          
+          <!-- Anleitung -->
+          <div class="bg-white rounded-lg shadow-sm p-6">
+            <h2 class="text-xl font-semibold text-gray-900 mb-4">Zubereitung</h2>
+            
+            {recipe.instructions?.length > 0 ? (
+              <ol class="space-y-4 ml-5 list-decimal">
+                {recipe.instructions.map(step => (
+                  <li class="pl-2">
+                    <p>{step.instruction}</p>
+                  </li>
+                ))}
+              </ol>
+            ) : (
+              <p class="text-gray-500">Keine Zubereitungsschritte vorhanden</p>
+            )}
+          </div>
+          
+          {recipe.notes && (
+            <div class="bg-yellow-50 rounded-lg shadow-sm p-6">
+              <h2 class="text-xl font-semibold text-gray-900 mb-4">Notizen</h2>
+              <p class="text-gray-700">{recipe.notes}</p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )}
+</RecipeLayout>
+
+<script>
+  // Portionenanpassung und dynamische Berechnung der Zutatenmengen
+  document.addEventListener('DOMContentLoaded', () => {
+    const decreaseButton = document.getElementById('decreaseServings');
+    const increaseButton = document.getElementById('increaseServings');
+    const servingsCount = document.getElementById('servingsCount');
+    const quantityElements = document.querySelectorAll('.ingredient-quantity');
+    const addToShoppingListButton = document.getElementById('addToShoppingList');
+    const addToMealPlanButton = document.getElementById('addToMealPlanButton');
+    
+    // Ausgangswert speichern
+    const originalServings = parseInt(servingsCount.textContent);
+    
+    // Portionenanpassung
+    if (decreaseButton && increaseButton && servingsCount) {
+      decreaseButton.addEventListener('click', () => {
+        const currentServings = parseInt(servingsCount.textContent);
+        if (currentServings > 1) {
+          updateServings(currentServings - 1);
+        }
+      });
+      
+      increaseButton.addEventListener('click', () => {
+        const currentServings = parseInt(servingsCount.textContent);
+        updateServings(currentServings + 1);
+      });
+    }
+    
+    // Funktion zum Aktualisieren der Portionen und Zutatenmengen
+    function updateServings(newServings) {
+      // Aktualisiere Portionszahl
+      servingsCount.textContent = newServings;
+      
+      // Berechne Mengenfaktor
+      const factor = newServings / originalServings;
+      
+      // Aktualisiere alle Zutatenmengen
+      quantityElements.forEach(el => {
+        const originalValue = parseFloat(el.dataset.original);
+        if (!isNaN(originalValue)) {
+          // Berechne neue Menge und runde auf 2 Dezimalstellen
+          let newValue = originalValue * factor;
+          
+          // Schönere Formatierung: Entferne überflüssige Nullen und Dezimalpunkte
+          if (newValue === Math.floor(newValue)) {
+            el.textContent = Math.floor(newValue);
+          } else {
+            // Auf max. 2 Dezimalstellen runden
+            el.textContent = newValue.toFixed(2).replace(/\.?0+$/, '');
+          }
+        }
+      });
+    }
+    
+    // "Zur Einkaufsliste"-Button
+    if (addToShoppingListButton) {
+      addToShoppingListButton.addEventListener('click', () => {
+        const recipeId = window.location.pathname.split('/').pop();
+        const currentServings = parseInt(servingsCount.textContent);
+        
+        // In echter App: API-Aufruf zur Speicherung in der Datenbank
+        alert(`Zutaten für ${currentServings} Portionen zur Einkaufsliste hinzugefügt!`);
+      });
+    }
+    
+    // "Zum Speiseplan"-Button
+    if (addToMealPlanButton) {
+      addToMealPlanButton.addEventListener('click', () => {
+        const recipeId = window.location.pathname.split('/').pop();
+        
+        // In echter App: Navigiere zur Speiseplan-Seite oder öffne ein Modal
+        alert('Rezept zum Speiseplan hinzufügen (wird später implementiert)');
+      });
+    }
+  });
+</script>

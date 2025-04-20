@@ -1,0 +1,78 @@
+---
+// RecipeLayout.astro - Grundlayout für die RecipeApp
+import "../styles/global.css";
+
+const { title = "RecipeApp" } = Astro.props;
+
+// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
+const user = {
+  id: "mock-user-id",
+  name: "Testbenutzer",
+};
+---
+
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Eine App zum Verwalten von Rezepten, Erstellen von Speiseplänen und Einkaufslisten"
+    />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>{title} | RecipeApp</title>
+  </head>
+  <body class="min-h-screen bg-gray-50">
+    <header class="bg-white shadow">
+      <div class="container mx-auto px-4 py-4">
+        <div class="flex justify-between items-center">
+          <a href="/" class="flex items-center space-x-2">
+            <span class="text-2xl font-bold text-emerald-600">RecipeApp</span>
+          </a>
+          <nav class="flex items-center space-x-6">
+            <a
+              href="/recipes"
+              class="font-medium text-gray-700 hover:text-emerald-600"
+              >Rezepte</a
+            >
+            <a
+              href="/meal-plans"
+              class="font-medium text-gray-700 hover:text-emerald-600"
+              >Speisepläne</a
+            >
+            <a
+              href="/shopping-lists"
+              class="font-medium text-gray-700 hover:text-emerald-600"
+              >Einkaufslisten</a
+            >
+          </nav>
+          <div class="flex items-center space-x-4">
+            <div class="text-sm text-gray-700">
+              <span>Hallo, {user.name}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="container mx-auto px-4 py-6">
+      <slot />
+    </main>
+
+    <footer class="bg-gray-100 py-6 mt-12">
+      <div class="container mx-auto px-4">
+        <div class="flex justify-between items-center">
+          <div class="text-sm text-gray-500">
+            &copy; {new Date().getFullYear()} RecipeApp
+          </div>
+          <div class="text-sm text-gray-500">
+            <a href="#" class="hover:underline">Datenschutz</a>
+            <span class="px-2">|</span>
+            <a href="#" class="hover:underline">Impressum</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+  </body>
+</html>

@@ -1,0 +1,285 @@
+---
+// RecipeSearchBar-Komponente für die Suche und Filterung von Rezepten
+// Implementiert die Anforderungen FR008 (Rezeptbibliothek suchen) und FR009 (Rezeptbibliothek filtern)
+
+// Optional können Tags als Props übergeben werden
+const { availableTags = [] } = Astro.props;
+---
+
+<div class="mb-8 bg-white rounded-lg shadow-sm p-4">
+  <form id="searchForm" class="space-y-4">
+    <!-- Suchfeld -->
+    <div>
+      <div class="relative">
+        <input
+          type="text"
+          id="searchQuery"
+          name="q"
+          placeholder="Nach Rezepten oder Zutaten suchen..."
+          class="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
+        />
+        <div
+          class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="w-5 h-5 text-gray-400"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M10.5 3.75a6.75 6.75 0 100 13.5 6.75 6.75 0 000-13.5zM2.25 10.5a8.25 8.25 0 1114.59 5.28l4.69 4.69a.75.75 0 11-1.06 1.06l-4.69-4.69A8.25 8.25 0 012.25 10.5z"
+              clip-rule="evenodd"></path>
+          </svg>
+        </div>
+        <button
+          type="button"
+          id="clearSearch"
+          class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 hidden"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="w-5 h-5"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z"
+              clip-rule="evenodd"></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Filter-Optionen -->
+    <div class="flex flex-wrap gap-4">
+      <!-- Zeitfilter -->
+      <div class="w-full md:w-auto">
+        <label
+          for="timeFilter"
+          class="block text-sm font-medium text-gray-700 mb-1"
+          >Zubereitungszeit</label
+        >
+        <select
+          id="timeFilter"
+          name="time"
+          class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+        >
+          <option value="">Alle Zeiten</option>
+          <option value="15">Unter 15 Minuten</option>
+          <option value="30">Unter 30 Minuten</option>
+          <option value="45">Unter 45 Minuten</option>
+          <option value="60">Unter 1 Stunde</option>
+          <option value="120">Unter 2 Stunden</option>
+        </select>
+      </div>
+
+      <!-- Tag-Filter (wenn Tags verfügbar sind) -->
+      {
+        availableTags.length > 0 && (
+          <div class="w-full md:w-auto flex-grow">
+            <label
+              for="tagFilter"
+              class="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Tags
+            </label>
+            <div class="relative">
+              <select
+                id="tagFilter"
+                name="tag"
+                class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+              >
+                <option value="">Alle Tags</option>
+                {availableTags.map((tag) => (
+                  <option value={tag.id}>{tag.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        )
+      }
+
+      <!-- Sortier-Option -->
+      <div class="w-full md:w-auto">
+        <label
+          for="sortOption"
+          class="block text-sm font-medium text-gray-700 mb-1"
+          >Sortieren nach</label
+        >
+        <select
+          id="sortOption"
+          name="sort"
+          class="block w-full py-2 px-3 border border-gray-300 bg-white rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500"
+        >
+          <option value="newest">Neueste zuerst</option>
+          <option value="oldest">Älteste zuerst</option>
+          <option value="az">A-Z</option>
+          <option value="za">Z-A</option>
+          <option value="time_asc">Kürzeste Zubereitungszeit</option>
+          <option value="time_desc">Längste Zubereitungszeit</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Aktive Filter-Anzeige -->
+    <div id="activeFilters" class="flex flex-wrap gap-2 pt-2 hidden">
+      <!-- Hier werden aktive Filter als Tags angezeigt (via JavaScript) -->
+    </div>
+  </form>
+</div>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    const searchForm = document.getElementById("searchForm");
+    const searchInput = document.getElementById("searchQuery");
+    const clearButton = document.getElementById("clearSearch");
+    const timeFilter = document.getElementById("timeFilter");
+    const tagFilter = document.getElementById("tagFilter");
+    const sortOption = document.getElementById("sortOption");
+    const activeFiltersContainer = document.getElementById("activeFilters");
+
+    // Funktion zum Auslösen der Suche/Filterung
+    function triggerSearch() {
+      // Aktive Filter anzeigen
+      updateActiveFilters();
+
+      // Hier würde in einer echten Implementierung der API-Aufruf für die Suche erfolgen
+      // Für dieses Beispiel geben wir nur die Filterkriterien in der Konsole aus
+      const searchParams = {
+        query: searchInput.value,
+        timeFilter: timeFilter.value,
+        tagFilter: tagFilter?.value || null,
+        sortOption: sortOption.value,
+      };
+
+      console.log("Suche mit Parametern:", searchParams);
+
+      // Event auslösen, damit andere Komponenten auf die Suche reagieren können
+      const searchEvent = new CustomEvent("recipe-search", {
+        detail: searchParams,
+        bubbles: true,
+      });
+      searchForm.dispatchEvent(searchEvent);
+    }
+
+    // Aktive Filter als Tags anzeigen
+    function updateActiveFilters() {
+      // Container leeren
+      activeFiltersContainer.innerHTML = "";
+
+      let hasActiveFilters = false;
+
+      // Suchbegriff
+      if (searchInput.value) {
+        addFilterTag("Suchbegriff: " + searchInput.value, "query");
+        hasActiveFilters = true;
+        clearButton.classList.remove("hidden");
+      } else {
+        clearButton.classList.add("hidden");
+      }
+
+      // Zeitfilter
+      if (timeFilter.value) {
+        const selectedOption = timeFilter.options[timeFilter.selectedIndex];
+        addFilterTag(selectedOption.text, "time");
+        hasActiveFilters = true;
+      }
+
+      // Tag-Filter
+      if (tagFilter && tagFilter.value) {
+        const selectedOption = tagFilter.options[tagFilter.selectedIndex];
+        addFilterTag(selectedOption.text, "tag");
+        hasActiveFilters = true;
+      }
+
+      // Sortierung (optional, je nach UI-Design)
+      if (sortOption.value !== "newest") {
+        const selectedOption = sortOption.options[sortOption.selectedIndex];
+        addFilterTag("Sortierung: " + selectedOption.text, "sort");
+        hasActiveFilters = true;
+      }
+
+      // Container ein-/ausblenden
+      if (hasActiveFilters) {
+        activeFiltersContainer.classList.remove("hidden");
+      } else {
+        activeFiltersContainer.classList.add("hidden");
+      }
+    }
+
+    // Hilfsfunktion zum Hinzufügen eines Filter-Tags
+    function addFilterTag(text, type) {
+      const tag = document.createElement("div");
+      tag.className =
+        "inline-flex items-center bg-emerald-50 text-emerald-800 rounded-full px-3 py-1 text-sm";
+      tag.dataset.filterType = type;
+
+      tag.innerHTML = `
+        ${text}
+        <button type="button" class="ml-1 text-emerald-600 hover:text-emerald-800 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+          </svg>
+        </button>
+      `;
+
+      // Event-Listener zum Entfernen des Filters
+      tag.querySelector("button").addEventListener("click", () => {
+        removeFilter(type);
+      });
+
+      activeFiltersContainer.appendChild(tag);
+    }
+
+    // Filter entfernen
+    function removeFilter(type) {
+      if (type === "query") {
+        searchInput.value = "";
+        clearButton.classList.add("hidden");
+      } else if (type === "time") {
+        timeFilter.value = "";
+      } else if (type === "tag" && tagFilter) {
+        tagFilter.value = "";
+      } else if (type === "sort") {
+        sortOption.value = "newest";
+      }
+
+      // Suche neu auslösen
+      triggerSearch();
+    }
+
+    // Event-Listener für Formular-Änderungen
+    searchInput.addEventListener("input", () => {
+      if (searchInput.value) {
+        clearButton.classList.remove("hidden");
+      } else {
+        clearButton.classList.add("hidden");
+      }
+      triggerSearch();
+    });
+
+    // Clear-Button
+    clearButton.addEventListener("click", () => {
+      searchInput.value = "";
+      clearButton.classList.add("hidden");
+      triggerSearch();
+    });
+
+    // Dropdown-Filter
+    timeFilter.addEventListener("change", triggerSearch);
+    if (tagFilter) tagFilter.addEventListener("change", triggerSearch);
+    sortOption.addEventListener("change", triggerSearch);
+
+    // Verhindern, dass das Formular abgeschickt wird
+    searchForm.addEventListener("submit", (e) => {
+      e.preventDefault();
+      triggerSearch();
+    });
+
+    // Initialen Zustand setzen
+    updateActiveFilters();
+  });
+</script>

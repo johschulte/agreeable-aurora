@@ -1,0 +1,191 @@
+---
+// Rezeptübersichtsseite - Für die Anzeige aller Rezepte mit Such- und Filterfunktionen
+import RecipeLayout from "../../layouts/RecipeLayout.astro";
+import RecipeCard from "../../components/recipes/RecipeCard.astro";
+import RecipeSearchBar from "../../components/recipes/RecipeSearchBar.astro";
+import { getUserRecipes, getUserTags } from "../../utils/db-recipe.js";
+
+// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
+const userId = "mock-user-id";
+
+// Parameter aus URL oder Standard
+const searchTerm = Astro.url.searchParams.get("searchTerm") || "";
+const timeFilter = Astro.url.searchParams.get("timeFilter") || "all";
+let selectedTags = Astro.url.searchParams.getAll("tags");
+
+// Daten laden
+let recipes = [];
+let allTags = [];
+let errorMessage = null;
+
+try {
+  // Lade alle Tags für die Filterkomponente
+  allTags = await getUserTags(userId);
+
+  // Optionen für die Rezeptabfrage
+  const options = {
+    sortBy: "created_at",
+    sortOrder: "desc",
+  };
+
+  // Wenn Tags ausgewählt sind, füge sie zur Abfrage hinzu
+  if (selectedTags && selectedTags.length > 0) {
+    options.tags = selectedTags;
+  }
+
+  // Lade Rezepte, eventuell mit Tag-Filtern
+  recipes = await getUserRecipes(userId, options);
+
+  // Clientseitig filtern nach Suchbegriff und Zeit
+  if (searchTerm) {
+    const searchLower = searchTerm.toLowerCase();
+    recipes = recipes.filter(
+      (recipe) =>
+        recipe.title.toLowerCase().includes(searchLower) ||
+        (recipe.description &&
+          recipe.description.toLowerCase().includes(searchLower)) ||
+        recipe.ingredients.some((i) =>
+          i.name.toLowerCase().includes(searchLower)
+        )
+    );
+  }
+
+  // Zeit-Filter anwenden
+  if (timeFilter !== "all") {
+    const maxTime = parseInt(timeFilter, 10);
+    recipes = recipes.filter((recipe) => {
+      const totalTime =
+        (recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0);
+      return totalTime <= maxTime;
+    });
+  }
+} catch (error) {
+  console.error("Fehler beim Laden der Rezeptdaten:", error);
+  errorMessage =
+    "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
+}
+
+// Prüfe, ob Filter aktiv sind
+const hasActiveFilters =
+  searchTerm || timeFilter !== "all" || selectedTags.length > 0;
+---
+
+<RecipeLayout title="Meine Rezepte">
+  <div class="mb-6 flex justify-between items-center">
+    <h1 class="text-2xl font-bold text-gray-900">Meine Rezepte</h1>
+    <div class="flex space-x-3">
+      <a
+        href="/recipes/import-url"
+        class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          class="w-5 h-5 mr-2 text-emerald-600"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z"
+            clip-rule="evenodd"></path>
+        </svg>
+        Importieren
+      </a>
+      <a
+        href="/recipes/new"
+        class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="currentColor"
+          class="w-5 h-5 mr-2"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z"
+            clip-rule="evenodd"></path>
+        </svg>
+        Neu
+      </a>
+    </div>
+  </div>
+
+  <!-- Suchleiste und Filter -->
+  <RecipeSearchBar
+    allTags={allTags}
+    selectedTags={selectedTags}
+    searchTerm={searchTerm}
+    showAdvanced={hasActiveFilters}
+  />
+
+  {
+    errorMessage ? (
+      <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+        {errorMessage}
+      </div>
+    ) : recipes.length > 0 ? (
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        {recipes.map((recipe) => (
+          <RecipeCard recipe={recipe} />
+        ))}
+      </div>
+    ) : hasActiveFilters ? (
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+        <p class="text-gray-600 mb-4">
+          Keine Rezepte gefunden, die deinen Filterkriterien entsprechen.
+        </p>
+        <a
+          href="/recipes"
+          class="inline-block px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+        >
+          Filter zurücksetzen
+        </a>
+      </div>
+    ) : (
+      <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+        <p class="text-gray-600 mb-4">
+          Du hast noch keine Rezepte in deiner Sammlung.
+        </p>
+        <div class="flex flex-col sm:flex-row justify-center gap-4">
+          <a
+            href="/recipes/import-url"
+            class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="w-5 h-5 mr-2 text-emerald-600"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            URL importieren
+          </a>
+          <a
+            href="/recipes/new"
+            class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center justify-center"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              fill="currentColor"
+              class="w-5 h-5 mr-2"
+            >
+              <path
+                fill-rule="evenodd"
+                d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z"
+                clip-rule="evenodd"
+              />
+            </svg>
+            Rezept erstellen
+          </a>
+        </div>
+      </div>
+    )
+  }
+</RecipeLayout>

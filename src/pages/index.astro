@@ -1,179 +1,275 @@
 ---
-import Layout from "../layouts/Layout.astro";
-import { createList } from "../utils/db.js";
+// Index-Seite für die RecipeApp - Haupteinstiegspunkt der Anwendung
+import RecipeLayout from "../layouts/RecipeLayout.astro";
+import { getUserRecipes, getUserTags } from "../utils/db-recipe.js";
 
-// Explicitly set this page to server-side rendering to access request headers
-export const prerender = false;
+// Mock für Benutzerdaten - in einer echten App würde dies durch Authentifizierung ersetzt
+const userId = "mock-user-id";
 
-// FR001, FR006, FR007: Verarbeitung der Listenerstellung
-let errorMessage = "";
-let successMessage = "";
-let redirectUrl = "";
+// Lade ein paar Demo-Rezepte für die Startseite
+let recentRecipes = [];
+let tags = [];
+let errorMessage = null;
 
-// In Astro v5 benötigen wir eine spezielle Verarbeitung für das Formular
-if (Astro.request.method === "POST") {
-  try {
-    // Anstatt formData() zu verwenden, nutzen wir das Request-Objekt direkt
-    const contentType = Astro.request.headers.get("content-type") || "";
+try {
+  // Lade die neuesten Rezepte
+  recentRecipes = await getUserRecipes(userId, {
+    limit: 4,
+    sortBy: "created_at",
+    sortOrder: "desc",
+  });
 
-    // Behandlung basierend auf dem Content-Type
-    let title, description, customSlug;
-
-    if (contentType.includes("application/x-www-form-urlencoded")) {
-      // URLSearchParams für urlencoded form data
-      const body = await Astro.request.text();
-      const params = new URLSearchParams(body);
-      title = params.get("title") || "Unbenannte Liste";
-      description = params.get("description") || "";
-      customSlug = params.get("slug") || "";
-    } else {
-      // Fallback-Methode, falls Content-Type nicht passt
-      try {
-        const body = await Astro.request.json();
-        title = body.title || "Unbenannte Liste";
-        description = body.description || "";
-        customSlug = body.slug || "";
-      } catch (e) {
-        // Wenn JSON-Parsing fehlschlägt, versuchen wir es mit Standardwerten
-        title = "Unbenannte Liste";
-        description = "";
-        customSlug = "";
-      }
-    }
-
-    // FR007: Automatische Slug-Generierung, wenn keiner angegeben
-    let slug;
-    if (customSlug && customSlug.trim() !== "") {
-      slug = customSlug;
-    } else {
-      const baseSlug = title
-        .toLowerCase()
-        .replace(/[^\w\s-]/g, "")
-        .replace(/\s+/g, "-");
-      const randomSuffix = Math.floor(Math.random() * 1000);
-      slug = `${baseSlug}-${randomSuffix}`;
-    }
-
-    // Liste in der Datenbank erstellen
-    const newList = await createList(title, description, slug);
-
-    // Weiterleitung zur Bearbeitungsseite der neuen Liste
-    return Astro.redirect(`/list/${slug}/edit`);
-  } catch (error: unknown) {
-    console.error("Fehler beim Erstellen der Liste:", error);
-    errorMessage =
-      error instanceof Error
-        ? error.message
-        : "Liste konnte nicht erstellt werden. Bitte versuchen Sie es erneut.";
-  }
+  // Lade Tags für Filter
+  tags = await getUserTags(userId);
+} catch (error) {
+  console.error("Fehler beim Laden der Startseiten-Daten:", error);
+  errorMessage =
+    "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
 }
+
+// Demo-Features für die Startseite
+const features = [
+  {
+    title: "Rezepte sammeln",
+    description:
+      "Importiere Rezepte von Webseiten oder erstelle deine eigenen und organisiere deine Sammlung mit Tags.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-emerald-600">
+      <path d="M11.25 4.533A9.707 9.707 0 006 3a9.735 9.735 0 00-3.25.555.75.75 0 00-.5.707v14.25a.75.75 0 001 .707A8.237 8.237 0 016 18.75c1.995 0 3.823.707 5.25 1.886V4.533zM12.75 20.636A8.214 8.214 0 0118 18.75c.966 0 1.89.166 2.75.47a.75.75 0 001-.708V4.262a.75.75 0 00-.5-.707A9.735 9.735 0 0018 3a9.707 9.707 0 00-5.25 1.533v16.103z" />
+    </svg>`,
+    link: "/recipes",
+  },
+  {
+    title: "Essensplan erstellen",
+    description:
+      "Plane deine Mahlzeiten für die Woche und generiere automatisch eine Einkaufsliste für alle benötigten Zutaten.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-emerald-600">
+      <path fill-rule="evenodd" d="M6.75 2.25A.75.75 0 017.5 3v1.5h9V3A.75.75 0 0118 3v1.5h.75a3 3 0 013 3v11.25a3 3 0 01-3 3H5.25a3 3 0 01-3-3V7.5a3 3 0 013-3H6V3a.75.75 0 01.75-.75zm13.5 9a1.5 1.5 0 00-1.5-1.5H5.25a1.5 1.5 0 00-1.5 1.5v7.5a1.5 1.5 0 001.5 1.5h13.5a1.5 1.5 0 001.5-1.5v-7.5z" clip-rule="evenodd" />
+    </svg>`,
+    link: "/meal-plans",
+  },
+  {
+    title: "Einkaufsliste verwalten",
+    description:
+      "Erstelle dynamische Einkaufslisten, hake Artikel ab und behalte den Überblick über deine benötigten Zutaten.",
+    icon: `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-6 h-6 text-emerald-600">
+      <path d="M2.25 2.25a.75.75 0 000 1.5h1.386c.17 0 .318.114.362.278l2.558 9.592a3.752 3.752 0 00-2.806 3.63c0 .414.336.75.75.75h15.75a.75.75 0 000-1.5H5.378A2.25 2.25 0 017.5 15h11.218a.75.75 0 00.674-.421 60.358 60.358 0 002.96-7.228.75.75 0 00-.525-.965A60.864 60.864 0 005.68 4.509l-.232-.867A1.875 1.875 0 003.636 2.25H2.25zM3.75 20.25a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0zM16.5 20.25a1.5 1.5 0 113 0 1.5 1.5 0 01-3 0z" />
+    </svg>`,
+    link: "/shopping-lists",
+  },
+];
 ---
 
-<Layout>
-  <div class="container py-10">
-    <div class="mx-auto max-w-2xl">
-      <div class="text-center mb-8">
-        <h1 class="text-4xl font-bold tracking-tight mb-3">The Urlist</h1>
-        <p class="text-xl text-muted-foreground">
-          Erstellen und teilen Sie Sammlungen von URLs
-        </p>
-      </div>
-
-      {
-        errorMessage && (
-          <div class="mb-6 p-4 rounded-md bg-destructive/15 text-destructive">
-            <p class="font-medium">Fehler</p>
-            <p class="text-sm">{errorMessage}</p>
-          </div>
-        )
-      }
-
-      {
-        successMessage && (
-          <div class="mb-6 p-4 rounded-md bg-green-100 text-green-800">
-            <p class="font-medium">Erfolg</p>
-            <p class="text-sm">{successMessage}</p>
-          </div>
-        )
-      }
-
-      <div class="bg-card rounded-lg border shadow-sm p-6">
-        <h2 class="text-2xl font-semibold mb-6">Neue URL-Liste erstellen</h2>
-
-        <form
-          method="POST"
-          enctype="application/x-www-form-urlencoded"
-          class="space-y-4"
+<RecipeLayout title="RecipeApp - Deine digitale Rezeptsammlung">
+  <!-- Hero-Sektion -->
+  <section class="py-10 mb-12">
+    <div class="max-w-4xl mx-auto text-center">
+      <h1 class="text-4xl font-bold text-gray-900 mb-4">
+        Deine digitale Rezeptsammlung
+      </h1>
+      <p class="text-xl text-gray-600 mb-8">
+        Sammle, plane und organisiere deine Lieblingsrezepte an einem Ort
+      </p>
+      <div class="flex justify-center gap-4">
+        <a
+          href="/recipes/new"
+          class="px-6 py-3 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
         >
-          <div class="space-y-2">
-            <label
-              for="title"
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Listenname
-            </label>
-            <input
-              type="text"
-              id="title"
-              name="title"
-              class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              placeholder="Meine großartige URL-Sammlung"
-              required
-            />
-          </div>
-
-          <div class="space-y-2">
-            <label
-              for="description"
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Beschreibung (optional)
-            </label>
-            <textarea
-              id="description"
-              name="description"
-              rows="3"
-              class="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-              placeholder="Eine Sammlung nützlicher Ressourcen zum Thema..."
-            ></textarea>
-          </div>
-
-          <div class="space-y-2">
-            <label
-              for="slug"
-              class="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-            >
-              Benutzerdefinierte URL (optional)
-            </label>
-            <div class="flex items-center">
-              <span
-                class="inline-flex items-center h-10 rounded-l-md border border-r-0 border-input bg-muted px-3 text-sm text-muted-foreground"
-              >
-                urlist.com/
-              </span>
-              <input
-                type="text"
-                id="slug"
-                name="slug"
-                class="flex h-10 w-full rounded-none rounded-r-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2"
-                placeholder="meine-url-liste"
-              />
-            </div>
-            <p class="text-sm text-muted-foreground">
-              Lassen Sie dieses Feld leer für eine automatisch generierte URL
-            </p>
-          </div>
-
-          <div class="pt-4">
-            <button
-              type="submit"
-              class="inline-flex h-10 w-full items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow transition-colors hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:pointer-events-none disabled:opacity-50"
-            >
-              Liste erstellen
-            </button>
-          </div>
-        </form>
+          Neues Rezept erstellen
+        </a>
+        <a
+          href="/recipes"
+          class="px-6 py-3 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
+        >
+          Meine Rezepte ansehen
+        </a>
       </div>
     </div>
-  </div>
-</Layout>
+  </section>
+
+  <!-- Features-Sektion -->
+  <section class="py-8 bg-gray-50 rounded-xl mb-12">
+    <div class="max-w-6xl mx-auto px-4">
+      <h2 class="text-2xl font-bold text-center text-gray-900 mb-8">
+        Alles für deine Küchenplanung
+      </h2>
+      <div class="grid md:grid-cols-3 gap-8">
+        {
+          features.map((feature) => (
+            <div class="bg-white p-6 rounded-lg shadow-sm">
+              <div class="mb-4" set:html={feature.icon} />
+              <h3 class="text-lg font-semibold mb-2">{feature.title}</h3>
+              <p class="text-gray-600 mb-4">{feature.description}</p>
+              <a
+                href={feature.link}
+                class="text-emerald-600 hover:text-emerald-700 font-medium flex items-center"
+              >
+                Mehr erfahren
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 20 20"
+                  fill="currentColor"
+                  class="w-5 h-5 ml-1"
+                >
+                  <path
+                    fill-rule="evenodd"
+                    d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"
+                    clip-rule="evenodd"
+                  />
+                </svg>
+              </a>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  </section>
+
+  <!-- Aktuelle Rezepte -->
+  <section class="py-8 mb-12">
+    <div class="flex justify-between items-center mb-6">
+      <h2 class="text-2xl font-bold text-gray-900">Deine neuesten Rezepte</h2>
+      <a
+        href="/recipes"
+        class="text-emerald-600 hover:text-emerald-700 font-medium flex items-center"
+      >
+        Alle anzeigen
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-5 h-5 ml-1"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"
+            clip-rule="evenodd"></path>
+        </svg>
+      </a>
+    </div>
+
+    {
+      errorMessage ? (
+        <div class="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md">
+          {errorMessage}
+        </div>
+      ) : recentRecipes.length > 0 ? (
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {recentRecipes.map((recipe) => (
+            <a
+              href={`/recipes/${recipe.id}`}
+              class="bg-white rounded-lg shadow overflow-hidden hover:shadow-md transition-shadow"
+            >
+              <div class="relative h-40">
+                <img
+                  src={recipe.image_path || "/images/recipe-placeholder.jpg"}
+                  alt={recipe.title}
+                  class="w-full h-full object-cover"
+                />
+                {recipe.rating && (
+                  <div class="absolute top-2 right-2 bg-yellow-100 text-yellow-800 px-2 py-1 rounded-md text-xs font-medium">
+                    {recipe.rating} ★
+                  </div>
+                )}
+              </div>
+              <div class="p-4">
+                <h3 class="font-medium mb-1 line-clamp-1">{recipe.title}</h3>
+                {recipe.description && (
+                  <p class="text-gray-600 text-sm mb-2 line-clamp-2">
+                    {recipe.description}
+                  </p>
+                )}
+
+                {recipe.prep_time_minutes && recipe.cook_time_minutes && (
+                  <div class="text-gray-500 text-xs">
+                    {recipe.prep_time_minutes + recipe.cook_time_minutes} Min.
+                  </div>
+                )}
+              </div>
+            </a>
+          ))}
+        </div>
+      ) : (
+        <div class="bg-gray-50 border border-gray-200 rounded-lg p-6 text-center">
+          <p class="text-gray-600 mb-4">
+            Du hast noch keine Rezepte in deiner Sammlung.
+          </p>
+          <a
+            href="/recipes/new"
+            class="inline-block px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+          >
+            Erstelle dein erstes Rezept
+          </a>
+        </div>
+      )
+    }
+  </section>
+
+  <!-- Schnellstart-Sektion -->
+  <section class="py-8 bg-emerald-50 rounded-xl">
+    <div class="max-w-4xl mx-auto px-4 text-center">
+      <h2 class="text-2xl font-bold text-gray-900 mb-4">
+        Starte mit deiner Rezeptverwaltung
+      </h2>
+      <p class="text-gray-600 mb-6">
+        Importiere Rezepte von Webseiten, lade PDF-Dokumente hoch oder erstelle
+        deine eigenen Rezepte
+      </p>
+      <div class="flex flex-col sm:flex-row justify-center gap-4">
+        <a
+          href="/recipes/import-url"
+          class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="w-5 h-5 mr-2 text-emerald-600"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M19.902 4.098a3.75 3.75 0 00-5.304 0l-4.5 4.5a3.75 3.75 0 001.035 6.037.75.75 0 01-.646 1.353 5.25 5.25 0 01-1.449-8.45l4.5-4.5a5.25 5.25 0 117.424 7.424l-1.757 1.757a.75.75 0 11-1.06-1.06l1.757-1.757a3.75 3.75 0 000-5.304zm-7.389 4.267a.75.75 0 011-.353 5.25 5.25 0 011.449 8.45l-4.5 4.5a5.25 5.25 0 11-7.424-7.424l1.757-1.757a.75.75 0 111.06 1.06l-1.757 1.757a3.75 3.75 0 105.304 5.304l4.5-4.5a3.75 3.75 0 00-1.035-6.037.75.75 0 01-.354-1z"
+              clip-rule="evenodd"></path>
+          </svg>
+          URL importieren
+        </a>
+        <a
+          href="/recipes/import-pdf"
+          class="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors flex items-center justify-center"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="w-5 h-5 mr-2 text-emerald-600"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M5.625 1.5H9a3.75 3.75 0 013.75 3.75v1.875c0 1.036.84 1.875 1.875 1.875H16.5a3.75 3.75 0 013.75 3.75v7.875c0 1.035-.84 1.875-1.875 1.875H5.625a1.875 1.875 0 01-1.875-1.875V3.375c0-1.036.84-1.875 1.875-1.875zm5.845 17.03a.75.75 0 001.06 0l3-3a.75.75 0 10-1.06-1.06l-1.72 1.72V12a.75.75 0 00-1.5 0v4.19l-1.72-1.72a.75.75 0 00-1.06 1.06l3 3z"
+              clip-rule="evenodd"></path>
+            <path
+              d="M14.25 5.25a5.23 5.23 0 00-1.279-3.434 9.768 9.768 0 016.963 6.963A5.23 5.23 0 0016.5 7.5h-1.875a.375.375 0 01-.375-.375V5.25z"
+            ></path>
+          </svg>
+          PDF hochladen
+        </a>
+        <a
+          href="/recipes/new"
+          class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center justify-center"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            viewBox="0 0 24 24"
+            fill="currentColor"
+            class="w-5 h-5 mr-2"
+          >
+            <path
+              fill-rule="evenodd"
+              d="M12 3.75a.75.75 0 01.75.75v6.75h6.75a.75.75 0 010 1.5h-6.75v6.75a.75.75 0 01-1.5 0v-6.75H4.5a.75.75 0 010-1.5h6.75V4.5a.75.75 0 01.75-.75z"
+              clip-rule="evenodd"></path>
+          </svg>
+          Manuell erstellen
+        </a>
+      </div>
+    </div>
+  </section>
+</RecipeLayout>
