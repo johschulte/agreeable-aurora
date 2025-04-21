@@ -1,7 +1,7 @@
 ---
 // Detailansicht eines einzelnen Rezepts (FR004)
-import RecipeLayout from "../../layouts/RecipeLayout.astro";
-import { getRecipeById } from "../../utils/db-recipe.js";
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getRecipeById } from "../../../utils/db-recipe.js";
 
 // Für serverseitiges Rendering, um dynamisch Rezepte aus der Datenbank zu laden
 export const prerender = false;
@@ -227,7 +227,7 @@ const tags = recipe?.recipe_tags?.map(tag => tag.tags) || [];
               <ol class="space-y-4 ml-5 list-decimal">
                 {recipe.instructions.map(step => (
                   <li class="pl-2 dark:text-gray-300">
-                    <p>{step.instruction}</p>
+                    <p>{step.description}</p>
                   </li>
                 ))}
               </ol>

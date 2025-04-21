@@ -30,7 +30,10 @@ if (Astro.request.method === "POST") {
       console.log("=== MIDDLEWARE DATEN ===");
       console.log("Formular erfolgreich geparst:", Astro.locals.formDataParsed);
       if (Astro.locals.formEntries) {
-        console.log("Formulareinträge aus Middleware:", JSON.stringify(Astro.locals.formEntries, null, 2));
+        console.log(
+          "Formulareinträge aus Middleware:",
+          JSON.stringify(Astro.locals.formEntries, null, 2)
+        );
       }
       if (Astro.locals.formDataError) {
         console.log("Fehler beim Parsen:", Astro.locals.formDataError);
@@ -40,7 +43,7 @@ if (Astro.request.method === "POST") {
 
     // Verwende FormData für die Datenanalyse
     let formData;
-    
+
     // Wenn die Middleware die FormData bereits geparst hat, verwende diese
     if (Astro.locals.formDataParsed && Astro.locals.formEntries) {
       console.log("Verwende FormData aus der Middleware");
@@ -51,26 +54,26 @@ if (Astro.request.method === "POST") {
           formData.append(key, value);
         }
       }
-    } 
+    }
     // Versuche Daten manuell aus der Middleware zu verwenden
     else if (Astro.locals.manualFormEntries) {
       console.log("Verwende manuell geparste Daten aus der Middleware");
       // Erstelle ein FormData-ähnliches Objekt
       formData = {
         _entries: Astro.locals.manualFormEntries,
-        get: function(key) {
+        get: function (key) {
           return this._entries[key] ? this._entries[key][0] : null;
         },
-        getAll: function(key) {
+        getAll: function (key) {
           return this._entries[key] || [];
         },
-        entries: function*() {
+        entries: function* () {
           for (const [key, values] of Object.entries(this._entries)) {
             for (const value of values) {
               yield [key, value];
             }
           }
-        }
+        },
       };
     }
     // Fallback: Versuche, die Daten direkt aus der Anfrage zu lesen
@@ -80,30 +83,30 @@ if (Astro.request.method === "POST") {
         formData = await Astro.request.formData();
       } catch (e) {
         console.error("Fehler beim direkten Lesen der FormData:", e.message);
-        
+
         // Versuche es als letzten Ausweg mit Text/URLSearchParams
         const text = await Astro.request.text();
         console.log("Roher Text der Anfrage:", text);
         const params = new URLSearchParams(text);
-        
+
         // Erstelle ein FormData-ähnliches Objekt
         formData = {
           _params: params,
-          get: function(key) {
+          get: function (key) {
             return this._params.get(key);
           },
-          getAll: function(key) {
+          getAll: function (key) {
             return this._params.getAll(key);
           },
-          entries: function*() {
+          entries: function* () {
             for (const entry of this._params.entries()) {
               yield entry;
             }
-          }
+          },
         };
       }
     }
-    
+
     // Detailliertes Logging des Formulars
     console.log("=== FORMULAR ROHDATEN ===");
     console.log("FormData-Objekt erstellt");

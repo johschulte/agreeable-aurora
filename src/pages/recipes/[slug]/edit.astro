@@ -1,0 +1,810 @@
+---
+// Bearbeiten eines vorhandenen Rezepts (FR005)
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getRecipeById, getUserTags, updateRecipe } from "../../../utils/db-recipe.js";
+
+// Für serverseitiges Rendering, um dynamisch Rezepte aus der Datenbank zu laden
+export const prerender = false;
+
+// ID aus der URL holen
+const { slug } = Astro.params;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+// Rezeptdaten und Tags laden
+let recipe = null;
+let allTags = [];
+let errorMessage = null;
+let successMessage = null;
+let selectedTagIds = [];
+
+try {
+  // Rezept laden
+  if (slug) {
+    recipe = await getRecipeById(slug, userId);
+  }
+  
+  if (!recipe) {
+    errorMessage = "Rezept nicht gefunden.";
+  } else {
+    // Alle verfügbaren Tags laden
+    allTags = await getUserTags(userId);
+    
+    // Bereits ausgewählte Tags extrahieren
+    selectedTagIds = recipe.recipe_tags.map(rt => rt.tags.id);
+  }
+} catch (error) {
+  console.error("Fehler beim Laden der Daten:", error);
+  errorMessage = "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
+}
+
+// Formularverarbeitung
+if (Astro.request.method === "POST" && slug && recipe) {
+  try {
+    // Verwende FormData für die Datenanalyse
+    let formData;
+    
+    try {
+      formData = await Astro.request.formData();
+    } catch (e) {
+      console.error("Fehler beim direkten Lesen der FormData:", e.message);
+      
+      // Versuche es als letzten Ausweg mit Text/URLSearchParams
+      const text = await Astro.request.text();
+      console.log("Roher Text der Anfrage:", text);
+      const params = new URLSearchParams(text);
+      
+      // Erstelle ein FormData-ähnliches Objekt
+      formData = {
+        _params: params,
+        get: function(key) {
+          return this._params.get(key);
+        },
+        getAll: function(key) {
+          return this._params.getAll(key);
+        },
+        entries: function*() {
+          for (const entry of this._params.entries()) {
+            yield entry;
+          }
+        }
+      };
+    }
+
+    // Logging aller Form-Felder für bessere Übersicht
+    console.log("=== FORMULAR FELDER ===");
+    const formEntries = {};
+    for (const [key, value] of formData.entries()) {
+      if (!formEntries[key]) {
+        formEntries[key] = [];
+      }
+      formEntries[key].push(value);
+    }
+    console.log(JSON.stringify(formEntries, null, 2));
+    console.log("=====================");
+
+    // Basisdaten des Rezepts - mit Validierung und Standardwerten
+    const title = formData.get("title") || "";
+    if (!title.trim()) {
+      throw new Error("Titel ist ein Pflichtfeld.");
+    }
+
+    const description = formData.get("description") || "";
+    const prepTime = Math.max(
+      0,
+      parseInt(formData.get("prep_time_minutes") || "0", 10)
+    );
+    const cookTime = Math.max(
+      0,
+      parseInt(formData.get("cook_time_minutes") || "0", 10)
+    );
+
+    // Stelle sicher, dass servings mindestens 1 ist (wegen der Datenbankprüfung)
+    let servings = parseInt(formData.get("servings") || "0", 10);
+    if (servings < 1) {
+      servings = 1; // Standardwert für Portionen
+    }
+
+    const notes = formData.get("notes") || "";
+
+    // Rezeptdaten-Objekt
+    const recipeData = {
+      title,
+      description,
+      prep_time_minutes: prepTime,
+      cook_time_minutes: cookTime,
+      servings,
+      notes,
+      // Behalte die anderen Daten bei
+      user_id: recipe.user_id,
+      source_url: recipe.source_url,
+      image_path: recipe.image_path,
+      pdf_path: recipe.pdf_path,
+      updated_at: new Date().toISOString()
+    };
+
+    // Zutaten verarbeiten
+    const ingredients = [];
+    // Da URLSearchParams.getAll() nicht verfügbar ist, extrahieren wir die Zutaten manuell
+    const entries = Array.from(formData.entries());
+
+    // Finde alle Zutaten
+    const quantityEntries = entries
+      .filter(([key]) => key === "ingredient_quantity")
+      .map(([_, value]) => value);
+    const unitEntries = entries
+      .filter(([key]) => key === "ingredient_unit")
+      .map(([_, value]) => value);
+    const nameEntries = entries
+      .filter(([key]) => key === "ingredient_name")
+      .map(([_, value]) => value);
+
+    for (let i = 0; i < nameEntries.length; i++) {
+      if (nameEntries[i]) {
+        ingredients.push({
+          name: nameEntries[i],
+          quantity: parseFloat(quantityEntries[i] || "0"),
+          unit: unitEntries[i] || "",
+        });
+      }
+    }
+
+    // Prüfe, ob mindestens eine Zutat vorhanden ist
+    if (ingredients.length === 0) {
+      throw new Error("Bitte füge mindestens eine Zutat hinzu.");
+    }
+
+    // Zubereitungsschritte verarbeiten
+    const instructions = [];
+    const instructionEntries = entries
+      .filter(([key]) => key === "instruction")
+      .map(([_, value]) => value);
+
+    for (let i = 0; i < instructionEntries.length; i++) {
+      if (instructionEntries[i]) {
+        instructions.push({
+          step_number: i + 1,
+          description: instructionEntries[i],
+        });
+      }
+    }
+
+    // Prüfe, ob mindestens eine Anweisung vorhanden ist
+    if (instructions.length === 0) {
+      throw new Error(
+        "Bitte füge mindestens eine Zubereitungsanweisung hinzu."
+      );
+    }
+
+    // Tags verarbeiten
+    const tagEntries = entries
+      .filter(([key]) => key === "tags")
+      .map(([_, value]) => value);
+
+    const tags = tagEntries;
+
+    // Ausgabe der Daten, die an die Datenbank gesendet werden
+    console.log("=== DATEN FÜR DATENBANK ===");
+    console.log("RecipeData:", JSON.stringify(recipeData, null, 2));
+    console.log("Ingredients:", JSON.stringify(ingredients, null, 2));
+    console.log("Instructions:", JSON.stringify(instructions, null, 2));
+    console.log("Tags:", JSON.stringify(tags, null, 2));
+    console.log("===========================");
+
+    // Rezept in der Datenbank aktualisieren
+    await updateRecipe(
+      slug,
+      recipeData,
+      ingredients,
+      instructions,
+      tags
+    );
+
+    // Erfolgsmeldung setzen
+    successMessage = "Rezept erfolgreich aktualisiert!";
+
+    // Weiterleitung zur Rezeptdetailseite
+    return Astro.redirect(`/recipes/${slug}`);
+  } catch (error) {
+    console.error("Fehler beim Aktualisieren des Rezepts:", error);
+    errorMessage = `Es gab ein Problem beim Aktualisieren des Rezepts: ${error.message}`;
+  }
+}
+
+// Formatiere Instruktionen für die Anzeige
+const formattedInstructions = recipe?.instructions ?? [];
+// Sortieren nach step_number
+formattedInstructions.sort((a, b) => a.step_number - b.step_number);
+---
+
+<RecipeLayout title={recipe ? `${recipe.title} bearbeiten` : "Rezept nicht gefunden"}>
+  {errorMessage && !recipe ? (
+    <div class="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md mb-6">
+      <p>{errorMessage}</p>
+      <a href="/recipes" class="text-red-700 dark:text-red-400 underline mt-2 inline-block">Zurück zur Rezeptübersicht</a>
+    </div>
+  ) : (
+    <>
+      <div class="mb-6">
+        <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+          Rezept bearbeiten
+        </h1>
+        <p class="text-gray-600 dark:text-gray-400 mt-2">
+          Ändere die Details dieses Rezepts und speichere deine Änderungen.
+        </p>
+      </div>
+
+      {errorMessage && (
+        <div class="mb-6 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-400 px-4 py-3 rounded-md">
+          {errorMessage}
+        </div>
+      )}
+
+      {successMessage && (
+        <div class="mb-6 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400 px-4 py-3 rounded-md">
+          {successMessage}
+        </div>
+      )}
+
+      <form
+        method="POST"
+        enctype="application/x-www-form-urlencoded"
+        class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+      >
+        <!-- Basisdaten -->
+        <div class="mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Grundinformationen
+          </h2>
+
+          <div class="mb-4">
+            <label
+              for="title"
+              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Titel <span class="text-red-500 dark:text-red-400">*</span>
+            </label>
+            <input
+              type="text"
+              id="title"
+              name="title"
+              value={recipe?.title}
+              required
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            />
+          </div>
+
+          <div class="mb-4">
+            <label
+              for="description"
+              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+            >
+              Beschreibung
+            </label>
+            <textarea
+              id="description"
+              name="description"
+              rows="3"
+              class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+            >{recipe?.description}</textarea>
+          </div>
+
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label
+                for="prep_time_minutes"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Zubereitungszeit (Minuten)
+              </label>
+              <input
+                type="number"
+                id="prep_time_minutes"
+                name="prep_time_minutes"
+                min="0"
+                value={recipe?.prep_time_minutes || 0}
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+
+            <div>
+              <label
+                for="cook_time_minutes"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Garzeit (Minuten)
+              </label>
+              <input
+                type="number"
+                id="cook_time_minutes"
+                name="cook_time_minutes"
+                min="0"
+                value={recipe?.cook_time_minutes || 0}
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+
+            <div>
+              <label
+                for="servings"
+                class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+              >
+                Portionen <span class="text-red-500 dark:text-red-400">*</span>
+              </label>
+              <input
+                type="number"
+                id="servings"
+                name="servings"
+                min="1"
+                value={recipe?.servings || 1}
+                required
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+          </div>
+        </div>
+
+        <!-- Zutaten -->
+        <div class="mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Zutaten <span class="text-red-500 dark:text-red-400">*</span>
+          </h2>
+
+          <div id="ingredients-container">
+            {recipe?.ingredients && recipe.ingredients.length > 0 ? (
+              recipe.ingredients.map((ingredient) => (
+                <div class="ingredient-row grid grid-cols-12 gap-2 mb-2">
+                  <div class="col-span-2">
+                    <input
+                      type="number"
+                      name="ingredient_quantity"
+                      placeholder="Menge"
+                      step="0.01"
+                      min="0"
+                      value={ingredient.quantity || ""}
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    />
+                  </div>
+                  <div class="col-span-2">
+                    <input
+                      type="text"
+                      name="ingredient_unit"
+                      placeholder="Einheit"
+                      value={ingredient.unit || ""}
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    />
+                  </div>
+                  <div class="col-span-7">
+                    <input
+                      type="text"
+                      name="ingredient_name"
+                      placeholder="Zutat"
+                      value={ingredient.name || ""}
+                      required
+                      class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                    />
+                  </div>
+                  <div class="col-span-1 flex items-center justify-center">
+                    <button
+                      type="button"
+                      class="remove-ingredient text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                      aria-label="Zutat entfernen"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-5 h-5"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                        ></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div class="ingredient-row grid grid-cols-12 gap-2 mb-2">
+                <div class="col-span-2">
+                  <input
+                    type="number"
+                    name="ingredient_quantity"
+                    placeholder="Menge"
+                    step="0.01"
+                    min="0"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  />
+                </div>
+                <div class="col-span-2">
+                  <input
+                    type="text"
+                    name="ingredient_unit"
+                    placeholder="Einheit"
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  />
+                </div>
+                <div class="col-span-7">
+                  <input
+                    type="text"
+                    name="ingredient_name"
+                    placeholder="Zutat"
+                    required
+                    class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                  />
+                </div>
+                <div class="col-span-1 flex items-center justify-center">
+                  <button
+                    type="button"
+                    class="remove-ingredient text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    aria-label="Zutat entfernen"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      class="w-5 h-5"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            id="add-ingredient"
+            class="mt-2 flex items-center text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="w-5 h-5 mr-1"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"></path>
+            </svg>
+            Weitere Zutat hinzufügen
+          </button>
+        </div>
+
+        <!-- Zubereitungsschritte -->
+        <div class="mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Zubereitung <span class="text-red-500 dark:text-red-400">*</span>
+          </h2>
+
+          <div id="instructions-container">
+            {formattedInstructions && formattedInstructions.length > 0 ? (
+              formattedInstructions.map((instruction, index) => (
+                <div class="instruction-row mb-2 flex">
+                  <div class="flex-grow">
+                    <div class="flex items-start">
+                      <span
+                        class="instruction-number bg-emerald-100 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-medium mr-2 mt-2"
+                      >{index + 1}</span>
+                      <textarea
+                        name="instruction"
+                        rows="2"
+                        placeholder="Beschreibe den Zubereitungsschritt..."
+                        class="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                        required
+                      >{instruction.description}</textarea>
+                    </div>
+                  </div>
+                  <div class="ml-2 flex items-start pt-2">
+                    <button
+                      type="button"
+                      class="remove-instruction text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                      aria-label="Schritt entfernen"
+                    >
+                      <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke-width="1.5"
+                        stroke="currentColor"
+                        class="w-5 h-5"
+                      >
+                        <path
+                          stroke-linecap="round"
+                          stroke-linejoin="round"
+                          d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                        ></path>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div class="instruction-row mb-2 flex">
+                <div class="flex-grow">
+                  <div class="flex items-start">
+                    <span
+                      class="instruction-number bg-emerald-100 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-medium mr-2 mt-2"
+                      >1</span
+                    >
+                    <textarea
+                      name="instruction"
+                      rows="2"
+                      placeholder="Beschreibe den Zubereitungsschritt..."
+                      class="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+                      required
+                    ></textarea>
+                  </div>
+                </div>
+                <div class="ml-2 flex items-start pt-2">
+                  <button
+                    type="button"
+                    class="remove-instruction text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+                    aria-label="Schritt entfernen"
+                  >
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke-width="1.5"
+                      stroke="currentColor"
+                      class="w-5 h-5"
+                    >
+                      <path
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                        d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0"
+                      ></path>
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="button"
+            id="add-instruction"
+            class="mt-2 flex items-center text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke-width="1.5"
+              stroke="currentColor"
+              class="w-5 h-5 mr-1"
+            >
+              <path
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                d="M12 4.5v15m7.5-7.5h-15"></path>
+            </svg>
+            Weiteren Schritt hinzufügen
+          </button>
+        </div>
+
+        <!-- Tags -->
+        <div class="mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Tags
+          </h2>
+
+          <div class="flex flex-wrap gap-2">
+            {
+              allTags.map((tag) => (
+                <label class="inline-flex items-center px-3 py-1.5 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="tags"
+                    value={tag.id}
+                    checked={selectedTagIds.includes(tag.id)}
+                    class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded mr-2"
+                  />
+                  <span class="text-sm text-gray-700 dark:text-gray-300">
+                    {tag.name}
+                  </span>
+                </label>
+              ))
+            }
+          </div>
+
+          <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">
+            Wähle passende Tags aus, um dein Rezept später leichter zu finden.
+          </p>
+        </div>
+
+        <!-- Notizen -->
+        <div class="mb-8">
+          <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Notizen
+          </h2>
+          <textarea
+            id="notes"
+            name="notes"
+            rows="3"
+            placeholder="Eigene Anmerkungen, Tipps oder Varianten..."
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          >{recipe?.notes}</textarea>
+        </div>
+
+        <!-- Buttons -->
+        <div class="flex justify-end space-x-3 mt-8">
+          <a
+            href={`/recipes/${recipe?.id}`}
+            class="px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 dark:focus:ring-offset-gray-800"
+          >
+            Abbrechen
+          </a>
+          <button
+            type="submit"
+            class="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-emerald-600 hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-emerald-500 dark:focus:ring-offset-gray-800"
+          >
+            Änderungen speichern
+          </button>
+        </div>
+      </form>
+    </>
+  )}
+</RecipeLayout>
+
+<script>
+  document.addEventListener("DOMContentLoaded", () => {
+    // Zutaten
+    const ingredientsContainer = document.getElementById(
+      "ingredients-container"
+    );
+    const addIngredientButton = document.getElementById("add-ingredient");
+
+    // Beim Laden initial Row-Events hinzufügen
+    document.querySelectorAll(".remove-ingredient").forEach((button) => {
+      button.addEventListener("click", removeIngredientRow);
+    });
+
+    // Neue Zutaten-Zeile hinzufügen
+    addIngredientButton.addEventListener("click", () => {
+      const newRow = document.createElement("div");
+      newRow.className = "ingredient-row grid grid-cols-12 gap-2 mb-2";
+      newRow.innerHTML = `
+        <div class="col-span-2">
+          <input 
+            type="number" 
+            name="ingredient_quantity" 
+            placeholder="Menge"
+            step="0.01"
+            min="0"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          />
+        </div>
+        <div class="col-span-2">
+          <input 
+            type="text" 
+            name="ingredient_unit" 
+            placeholder="Einheit"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          />
+        </div>
+        <div class="col-span-7">
+          <input 
+            type="text" 
+            name="ingredient_name" 
+            placeholder="Zutat"
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+          />
+        </div>
+        <div class="col-span-1 flex items-center justify-center">
+          <button 
+            type="button" 
+            class="remove-ingredient text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+            aria-label="Zutat entfernen"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+            </svg>
+          </button>
+        </div>
+      `;
+
+      ingredientsContainer.appendChild(newRow);
+      newRow
+        .querySelector(".remove-ingredient")
+        .addEventListener("click", removeIngredientRow);
+    });
+
+    function removeIngredientRow(e) {
+      const button = e.target.closest(".remove-ingredient");
+      const row = button.closest(".ingredient-row");
+
+      // Prüfen, ob es mindestens eine Zeile gibt, bevor wir löschen
+      if (document.querySelectorAll(".ingredient-row").length > 1) {
+        row.remove();
+      }
+    }
+
+    // Anweisungen
+    const instructionsContainer = document.getElementById(
+      "instructions-container"
+    );
+    const addInstructionButton = document.getElementById("add-instruction");
+
+    // Beim Laden initial Row-Events hinzufügen
+    document.querySelectorAll(".remove-instruction").forEach((button) => {
+      button.addEventListener("click", removeInstructionRow);
+    });
+
+    // Neue Anweisungs-Zeile hinzufügen
+    addInstructionButton.addEventListener("click", () => {
+      const newRow = document.createElement("div");
+      newRow.className = "instruction-row mb-2 flex";
+
+      // Aktuelle Schrittnummer bestimmen (für die Anzeige)
+      const currentSteps = document.querySelectorAll(".instruction-row").length;
+      const stepNumber = currentSteps + 1;
+
+      newRow.innerHTML = `
+        <div class="flex-grow">
+          <div class="flex items-start">
+            <span class="instruction-number bg-emerald-100 dark:bg-emerald-800 text-emerald-800 dark:text-emerald-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-medium mr-2 mt-2">${stepNumber}</span>
+            <textarea 
+              name="instruction" 
+              rows="2"
+              placeholder="Beschreibe den Zubereitungsschritt..."
+              class="flex-grow px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-400 dark:placeholder-gray-500"
+            ></textarea>
+          </div>
+        </div>
+        <div class="ml-2 flex items-start pt-2">
+          <button 
+            type="button" 
+            class="remove-instruction text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
+            aria-label="Schritt entfernen"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+            </svg>
+          </button>
+        </div>
+      `;
+
+      instructionsContainer.appendChild(newRow);
+      newRow
+        .querySelector(".remove-instruction")
+        .addEventListener("click", removeInstructionRow);
+      updateStepNumbers();
+    });
+
+    function removeInstructionRow(e) {
+      const button = e.target.closest(".remove-instruction");
+      const row = button.closest(".instruction-row");
+
+      // Prüfen, ob es mindestens eine Zeile gibt, bevor wir löschen
+      if (document.querySelectorAll(".instruction-row").length > 1) {
+        row.remove();
+        updateStepNumbers();
+      }
+    }
+
+    function updateStepNumbers() {
+      document
+        .querySelectorAll(".instruction-number")
+        .forEach((span, index) => {
+          span.textContent = index + 1;
+        });
+    }
+  });
+</script>
