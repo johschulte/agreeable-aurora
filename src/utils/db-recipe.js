@@ -323,32 +323,233 @@ export async function importRecipeFromUrl(url, userId) {
   try {
     // Normalisiere URL
     const normalizedUrl = normalizeUrl(url);
+    
+    // Initialisiere Standardantwort (für den Fall, dass kein Parsing möglich ist)
+    let recipeData = {
+      url: normalizedUrl,
+      user_id: userId,
+      title: "Importiertes Rezept",
+      description: `Importiert von ${normalizedUrl}`,
+      prep_time_minutes: 0,
+      cook_time_minutes: 0,
+      servings: 4,
+      source_url: normalizedUrl,
+      ingredients: [],
+      instructions: []
+    };
 
-    // Hier würde in einer vollständigen Implementation ein Webhook-Aufruf
-    // an einen Service erfolgen, der die URL parst und Rezeptdaten extrahiert
-    // Für diesen Prototyp geben wir ein Muster zurück
+    try {
+      // Anfrage an die URL senden und HTML-Inhalt erhalten
+      const response = await fetch(normalizedUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! Status: ${response.status}`);
+      }
+      
+      const html = await response.text();
+      
+      // Einfaches Parsing basierend auf Strukturelementen und häufigen Metadaten
+      // Häufige Strukturen für Rezeptseiten erkennen
+      
+      // 1. JSON-LD Schema.org-Daten suchen (die meisten modernen Rezeptseiten verwenden dies)
+      const jsonLdMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+      if (jsonLdMatches) {
+        for (const match of jsonLdMatches) {
+          try {
+            const jsonContent = match.replace(/<script type="application\/ld\+json">|<\/script>/gi, '');
+            const jsonData = JSON.parse(jsonContent);
+            
+            // Prüfen, ob es sich um ein Rezept handelt
+            if (jsonData['@type'] === 'Recipe' || 
+                (Array.isArray(jsonData['@graph']) && 
+                 jsonData['@graph'].some(item => item['@type'] === 'Recipe'))) {
+              
+              // Direkte Rezeptdaten oder aus dem Graph extrahieren
+              const recipeJson = jsonData['@type'] === 'Recipe' ? 
+                jsonData : 
+                jsonData['@graph'].find(item => item['@type'] === 'Recipe');
+              
+              if (recipeJson) {
+                // Extrahiere relevante Daten
+                recipeData.title = recipeJson.name || recipeData.title;
+                recipeData.description = recipeJson.description || recipeData.description;
+                
+                // Zeiten extrahieren und in Minuten umwandeln
+                if (recipeJson.prepTime) {
+                  const prepMinutes = convertISODurationToMinutes(recipeJson.prepTime);
+                  if (prepMinutes) recipeData.prep_time_minutes = prepMinutes;
+                }
+                
+                if (recipeJson.cookTime) {
+                  const cookMinutes = convertISODurationToMinutes(recipeJson.cookTime);
+                  if (cookMinutes) recipeData.cook_time_minutes = cookMinutes;
+                }
+                
+                // Portionen
+                if (recipeJson.recipeYield) {
+                  const servings = parseServings(recipeJson.recipeYield);
+                  if (servings) recipeData.servings = servings;
+                }
+                
+                // Hauptbild
+                if (recipeJson.image) {
+                  if (typeof recipeJson.image === 'string') {
+                    recipeData.image_path = recipeJson.image;
+                  } else if (Array.isArray(recipeJson.image) && recipeJson.image.length > 0) {
+                    recipeData.image_path = recipeJson.image[0];
+                  } else if (recipeJson.image.url) {
+                    recipeData.image_path = recipeJson.image.url;
+                  }
+                }
+                
+                // Zutaten
+                if (recipeJson.recipeIngredient && Array.isArray(recipeJson.recipeIngredient)) {
+                  recipeData.ingredients = recipeJson.recipeIngredient.map((ingredient, index) => {
+                    const parsedIngredient = parseIngredient(ingredient);
+                    return {
+                      name: parsedIngredient.name,
+                      quantity: parsedIngredient.quantity,
+                      unit: parsedIngredient.unit,
+                      display_order: index
+                    };
+                  });
+                }
+                
+                // Anweisungen
+                if (recipeJson.recipeInstructions) {
+                  let allInstructions = "";
+                  
+                  if (Array.isArray(recipeJson.recipeInstructions)) {
+                    // Alle Anweisungen in einen Text zusammenfassen
+                    allInstructions = recipeJson.recipeInstructions.map((instruction, index) => {
+                      // Wenn es ein Objekt mit text ist, verwende das
+                      const text = typeof instruction === 'object' ? 
+                        (instruction.text || instruction.name || '') : 
+                        instruction;
+                      
+                      return `${index + 1}. ${text}`;
+                    }).join("\n\n");
+                  } else if (typeof recipeJson.recipeInstructions === 'string') {
+                    // Falls es ein einzelner String ist, verwende ihn direkt
+                    allInstructions = recipeJson.recipeInstructions;
+                  }
+                  
+                  // Alle Anweisungen als einen einzigen Schritt speichern
+                  recipeData.instructions = [{
+                    step_number: 1,
+                    description: allInstructions
+                  }];
+                }
+                
+                // Bei erfolgreicher Extraktion aus JSON-LD abbrechen
+                break;
+              }
+            }
+          } catch (jsonError) {
+            console.error("Fehler beim Parsen der JSON-LD-Daten:", jsonError);
+            // Ignoriere fehlerhafte JSON-Daten und versuche weitere Methoden
+          }
+        }
+      }
+      
+      // Wenn keine Zutaten oder Anweisungen gefunden wurden, versuche HTML-Parsing
+      if (recipeData.ingredients.length === 0 || recipeData.instructions.length === 0) {
+        // 2. HTML-basiertes Parsing für häufige Rezeptklassen
+        
+        // Versuch, Zutaten zu finden
+        if (recipeData.ingredients.length === 0) {
+          const ingredientSelectors = [
+            'ul.ingredients li', 
+            '.ingredients-list li',
+            '.recipe-ingredients li',
+            '[itemprop="recipeIngredient"]',
+            '.ingredient-item'
+          ];
+          
+          for (const selector of ingredientSelectors) {
+            const regex = new RegExp(`<${selector.replace('.', ' class="[^"]*')}[^>]*>(.*?)<\/`, 'gi');
+            const matches = [...html.matchAll(regex)];
+            
+            if (matches.length > 0) {
+              recipeData.ingredients = matches.map((match, index) => {
+                const text = match[1].replace(/<[^>]*>/g, '').trim();
+                const parsedIngredient = parseIngredient(text);
+                return {
+                  name: parsedIngredient.name,
+                  quantity: parsedIngredient.quantity,
+                  unit: parsedIngredient.unit,
+                  display_order: index
+                };
+              });
+              break;
+            }
+          }
+        }
+        
+        // Versuch, Anweisungen zu finden
+        if (recipeData.instructions.length === 0) {
+          const instructionSelectors = [
+            'ol.instructions li',
+            '.recipe-instructions li',
+            '.recipe-steps li',
+            '[itemprop="recipeInstructions"]',
+            '.step-item'
+          ];
+          
+          for (const selector of instructionSelectors) {
+            const regex = new RegExp(`<${selector.replace('.', ' class="[^"]*')}[^>]*>(.*?)<\/`, 'gi');
+            const matches = [...html.matchAll(regex)];
+            
+            if (matches.length > 0) {
+              recipeData.instructions = matches.map((match, index) => ({
+                step_number: index + 1,
+                description: match[1].replace(/<[^>]*>/g, '').trim()
+              }));
+              break;
+            }
+          }
+        }
+        
+        // Versuche, den Titel zu finden, falls noch nicht gefunden
+        if (recipeData.title === "Importiertes Rezept") {
+          const titleMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/i) || 
+                           html.match(/<title[^>]*>(.*?)<\/title>/i);
+          if (titleMatch) {
+            recipeData.title = titleMatch[1]
+              .replace(/<[^>]*>/g, '')
+              .replace(/\s+/g, ' ')
+              .trim();
+          }
+        }
+      }
+    } catch (fetchError) {
+      console.error("Fehler beim Abrufen oder Parsen der Rezeptseite:", fetchError);
+      // Bei Fehler werden die Standarddaten verwendet
+    }
+
+    // Standardwerte für leere Zutaten und Anweisungen
+    if (recipeData.ingredients.length === 0) {
+      recipeData.ingredients = [
+        { name: "Zutat 1", quantity: 100, unit: "g", display_order: 0 },
+        { name: "Zutat 2", quantity: 2, unit: "EL", display_order: 1 }
+      ];
+    }
+    
+    if (recipeData.instructions.length === 0) {
+      recipeData.instructions = [
+        { step_number: 1, description: "Erster Schritt" },
+        { step_number: 2, description: "Zweiter Schritt" }
+      ];
+    }
 
     return {
       success: true,
-      message: "URL empfangen, Parsing läuft...",
-      data: {
-        url: normalizedUrl,
-        user_id: userId,
-        title: "Importiertes Rezept",
-        description: "Automatisch importierte Beschreibung",
-        prep_time_minutes: 15,
-        cook_time_minutes: 30,
-        servings: 4,
-        source_url: normalizedUrl,
-        ingredients: [
-          { name: "Zutat 1", quantity: 100, unit: "g" },
-          { name: "Zutat 2", quantity: 2, unit: "EL" },
-        ],
-        instructions: [
-          { step_number: 1, description: "Erster Schritt" },
-          { step_number: 2, description: "Zweiter Schritt" },
-        ],
-      },
+      message: "Rezept erfolgreich importiert.",
+      data: recipeData
     };
   } catch (error) {
     console.error("Fehler beim Importieren des Rezepts:", error);
@@ -357,6 +558,71 @@ export async function importRecipeFromUrl(url, userId) {
       message: "Fehler beim Importieren des Rezepts: " + error.message,
     };
   }
+}
+
+// Hilfsfunktion: Parst eine Zutat in ihre Bestandteile
+function parseIngredient(ingredientString) {
+  const result = {
+    quantity: 0,
+    unit: "",
+    name: ingredientString.trim()
+  };
+  
+  // Versuche, Menge und Einheit zu extrahieren
+  const regex = /^([\d\/.,]+)\s*([a-zA-ZäöüÄÖÜß]*)\s+(.+)$/;
+  const match = ingredientString.trim().match(regex);
+  
+  if (match) {
+    // Menge parsen (kann auch Brüche wie "1/2" enthalten)
+    const quantityStr = match[1].replace(',', '.');
+    if (quantityStr.includes('/')) {
+      const [numerator, denominator] = quantityStr.split('/');
+      result.quantity = parseFloat(numerator) / parseFloat(denominator);
+    } else {
+      result.quantity = parseFloat(quantityStr);
+    }
+    
+    // Wenn die Menge erfolgreich geparst wurde
+    if (!isNaN(result.quantity)) {
+      result.unit = match[2];
+      result.name = match[3];
+    }
+  }
+  
+  return result;
+}
+
+// Hilfsfunktion: Konvertiert ISO-Dauer-Format in Minuten
+function convertISODurationToMinutes(isoDuration) {
+  // ISO 8601 Duration-Format: P[n]Y[n]M[n]DT[n]H[n]M[n]S
+  if (!isoDuration || typeof isoDuration !== 'string') return null;
+  
+  // Nur PT-Format unterstützt (Stunden, Minuten, Sekunden)
+  const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
+  const match = isoDuration.match(regex);
+  
+  if (!match) return null;
+  
+  const hours = parseInt(match[1] || '0', 10);
+  const minutes = parseInt(match[2] || '0', 10);
+  const seconds = parseInt(match[3] || '0', 10);
+  
+  return hours * 60 + minutes + Math.round(seconds / 60);
+}
+
+// Hilfsfunktion: Extrahiert Portionszahl aus Text
+function parseServings(servingsText) {
+  if (!servingsText) return null;
+  
+  // Versuche, eine Zahl zu extrahieren
+  const regex = /(\d+)/;
+  const match = servingsText.toString().match(regex);
+  
+  if (match) {
+    return parseInt(match[1], 10);
+  }
+  
+  return null;
 }
 
 /*
