@@ -1,7 +1,7 @@
 ---
 // Bearbeiten eines vorhandenen Rezepts (FR005)
 import RecipeLayout from "../../../layouts/RecipeLayout.astro";
-import { getRecipeById, getUserTags, updateRecipe, uploadRecipeImage, isImageFile } from "../../../utils/db-recipe.js";
+import { getRecipeById, getUserTags, updateRecipe, uploadRecipeImage, isImageFile, deleteRecipe } from "../../../utils/db-recipe.js";
 
 // Für serverseitiges Rendering, um dynamisch Rezepte aus der Datenbank zu laden
 export const prerender = false;
@@ -41,133 +41,150 @@ try {
 
 // Verarbeitung der Formulardaten beim Absenden
 if (Astro.request.method === "POST") {
-  try {
-    // Formulardaten verarbeiten
-    const formData = await Astro.request.formData();
-    
-    // Grundlegende Rezeptinformationen
-    const title = formData.get("title")?.toString().trim();
-    
-    if (!title) {
-      throw new Error("Titel ist ein Pflichtfeld.");
+  const formData = await Astro.request.formData();
+  
+  // Prüfen, ob dies eine Löschaktion ist (FR006)
+  const action = formData.get("action");
+  
+  if (action === "delete") {
+    try {
+      // Rezept löschen
+      await deleteRecipe(slug);
+      
+      // Weiterleitung zur Rezeptübersicht nach erfolgreichem Löschen
+      return Astro.redirect("/recipes");
+    } catch (error) {
+      console.error("Fehler beim Löschen des Rezepts:", error);
+      errorMessage = `Es gab ein Problem beim Löschen des Rezepts: ${error.message}`;
     }
-
-    const description = formData.get("description") || "";
-    const prepTime = Math.max(
-      0,
-      parseInt(formData.get("prep_time_minutes") || "0", 10)
-    );
-    const cookTime = Math.max(
-      0,
-      parseInt(formData.get("cook_time_minutes") || "0", 10)
-    );
-
-    // Stelle sicher, dass servings mindestens 1 ist (wegen der Datenbankprüfung)
-    let servings = parseInt(formData.get("servings") || "0", 10);
-    if (servings < 1) {
-      servings = 1; // Standardwert für Portionen
-    }
-
-    const notes = formData.get("notes") || "";
-
-    // Rezeptdaten-Objekt
-    const recipeData = {
-      title,
-      description,
-      prep_time_minutes: prepTime,
-      cook_time_minutes: cookTime,
-      servings,
-      notes,
-      // Behalte die anderen Daten bei
-      user_id: recipe.user_id,
-    };
-
-    // Zutaten verarbeiten
-    const quantities = formData.getAll("ingredient_quantity");
-    const units = formData.getAll("ingredient_unit");
-    const names = formData.getAll("ingredient_name");
-    
-    const ingredients = [];
-    for (let i = 0; i < names.length; i++) {
-      const name = names[i]?.toString().trim();
-      if (name) {
-        ingredients.push({
-          name,
-          quantity: parseFloat(quantities[i]?.toString() || "0"),
-          unit: units[i]?.toString() || "",
-          display_order: i,
-        });
+  } else {
+    try {
+      // Formulardaten verarbeiten
+      
+      // Grundlegende Rezeptinformationen
+      const title = formData.get("title")?.toString().trim();
+      
+      if (!title) {
+        throw new Error("Titel ist ein Pflichtfeld.");
       }
-    }
 
-    // Anweisungen verarbeiten
-    const instructionValues = formData.getAll("instruction");
-    const instructions = [];
-    
-    for (let i = 0; i < instructionValues.length; i++) {
-      const description = instructionValues[i]?.toString().trim();
-      if (description) {
-        instructions.push({
-          step_number: i + 1,
-          description,
-        });
+      const description = formData.get("description") || "";
+      const prepTime = Math.max(
+        0,
+        parseInt(formData.get("prep_time_minutes") || "0", 10)
+      );
+      const cookTime = Math.max(
+        0,
+        parseInt(formData.get("cook_time_minutes") || "0", 10)
+      );
+
+      // Stelle sicher, dass servings mindestens 1 ist (wegen der Datenbankprüfung)
+      let servings = parseInt(formData.get("servings") || "0", 10);
+      if (servings < 1) {
+        servings = 1; // Standardwert für Portionen
       }
-    }
 
-    // Tags verarbeiten
-    const entries = Array.from(formData.entries());
-    const tagEntries = entries
-      .filter(([key]) => key === "tags")
-      .map(([_, value]) => value);
+      const notes = formData.get("notes") || "";
 
-    const tags = tagEntries;
+      // Rezeptdaten-Objekt
+      const recipeData = {
+        title,
+        description,
+        prep_time_minutes: prepTime,
+        cook_time_minutes: cookTime,
+        servings,
+        notes,
+        // Behalte die anderen Daten bei
+        user_id: recipe.user_id,
+      };
 
-    // Bild-Upload verarbeiten
-    const imageFile = formData.get("recipe_image");
-    
-    console.log("=== BILD-UPLOAD ===");
-    console.log("Bild:", imageFile ? `${imageFile.name} (${imageFile.type})` : "Kein Bild ausgewählt");
-
-    console.log("=== DATEN FÜR DATENBANK ===");
-    console.log("RecipeData:", JSON.stringify(recipeData, null, 2));
-    console.log("Ingredients:", JSON.stringify(ingredients, null, 2));
-    console.log("Instructions:", JSON.stringify(instructions, null, 2));
-    console.log("Tags:", JSON.stringify(tags, null, 2));
-    console.log("===========================");
-
-    // Rezept in der Datenbank aktualisieren
-    await updateRecipe(
-      slug,
-      recipeData,
-      ingredients,
-      instructions,
-      tags
-    );
-
-    // Wenn eine Bild-URL eingegeben wurde, diese verarbeiten und speichern
-    const imageUrl = formData.get("recipe_image_url")?.toString().trim();
-    
-    if (imageUrl && imageUrl !== "") {
-      try {
-        const { saveRecipeImageUrl } = await import("../../../utils/db-recipe.js");
-        
-        // Speichere die Bild-URL in der Datenbank
-        const imageResult = await saveRecipeImageUrl(slug, imageUrl);
-        console.log("Bild-URL erfolgreich gespeichert:", imageResult);
-      } catch (imageError) {
-        console.error("Fehler beim Speichern der Bild-URL:", imageError);
-        // Wir werfen hier keinen Fehler, damit das Rezept trotzdem gespeichert wird
+      // Zutaten verarbeiten
+      const quantities = formData.getAll("ingredient_quantity");
+      const units = formData.getAll("ingredient_unit");
+      const names = formData.getAll("ingredient_name");
+      
+      const ingredients = [];
+      for (let i = 0; i < names.length; i++) {
+        const name = names[i]?.toString().trim();
+        if (name) {
+          ingredients.push({
+            name,
+            quantity: parseFloat(quantities[i]?.toString() || "0"),
+            unit: units[i]?.toString() || "",
+            display_order: i,
+          });
+        }
       }
+
+      // Anweisungen verarbeiten
+      const instructionValues = formData.getAll("instruction");
+      const instructions = [];
+      
+      for (let i = 0; i < instructionValues.length; i++) {
+        const description = instructionValues[i]?.toString().trim();
+        if (description) {
+          instructions.push({
+            step_number: i + 1,
+            description,
+          });
+        }
+      }
+
+      // Tags verarbeiten
+      const entries = Array.from(formData.entries());
+      const tagEntries = entries
+        .filter(([key]) => key === "tags")
+        .map(([_, value]) => value);
+
+      const tags = tagEntries;
+
+      // Bild-Upload verarbeiten
+      const imageFile = formData.get("recipe_image");
+      
+      console.log("=== BILD-UPLOAD ===");
+      console.log("Bild:", imageFile ? `${imageFile.name} (${imageFile.type})` : "Kein Bild ausgewählt");
+
+      console.log("=== DATEN FÜR DATENBANK ===");
+      console.log("RecipeData:", JSON.stringify(recipeData, null, 2));
+      console.log("Ingredients:", JSON.stringify(ingredients, null, 2));
+      console.log("Instructions:", JSON.stringify(instructions, null, 2));
+      console.log("Tags:", JSON.stringify(tags, null, 2));
+      console.log("===========================");
+
+      // Rezept in der Datenbank aktualisieren
+      await updateRecipe(
+        slug,
+        recipeData,
+        ingredients,
+        instructions,
+        tags
+      );
+
+      // Wenn eine Bild-URL eingegeben wurde, diese verarbeiten und speichern
+      const imageUrl = formData.get("recipe_image_url")?.toString().trim();
+      
+      if (imageUrl && imageUrl !== "") {
+        try {
+          const { saveRecipeImageUrl } = await import("../../../utils/db-recipe.js");
+          
+          // Speichere die Bild-URL in der Datenbank
+          const imageResult = await saveRecipeImageUrl(slug, imageUrl);
+          console.log("Bild-URL erfolgreich gespeichert:", imageResult);
+        } catch (imageError) {
+          console.error("Fehler beim Speichern der Bild-URL:", imageError);
+          // Wir werfen hier keinen Fehler, damit das Rezept trotzdem gespeichert wird
+        }
+      }
+
+      // Erfolgsmeldung setzen
+      successMessage = "Rezept erfolgreich aktualisiert!";
+
+      // Weiterleitung zur Rezeptdetailseite
+      return Astro.redirect(`/recipes/${slug}`);
+    } catch (error) {
+      console.error("Fehler beim Aktualisieren des Rezepts:", error);
+      errorMessage = `Es gab ein Problem beim Aktualisieren des Rezepts: ${error.message}`;
     }
-
-    // Erfolgsmeldung setzen
-    successMessage = "Rezept erfolgreich aktualisiert!";
-
-    // Weiterleitung zur Rezeptdetailseite
-    return Astro.redirect(`/recipes/${slug}`);
-  } catch (error) {
-    console.error("Fehler beim Aktualisieren des Rezepts:", error);
-    errorMessage = `Es gab ein Problem beim Aktualisieren des Rezepts: ${error.message}`;
   }
 }
 
@@ -645,6 +662,13 @@ formattedInstructions.sort((a, b) => a.step_number - b.step_number);
           >
             Änderungen speichern
           </button>
+          <button
+            type="button"
+            id="delete-recipe"
+            class="px-4 py-2 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-red-600 hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 dark:focus:ring-offset-gray-800"
+          >
+            Rezept löschen
+          </button>
         </div>
       </form>
     </>
@@ -914,5 +938,24 @@ formattedInstructions.sort((a, b) => a.step_number - b.step_number);
       };
       img.src = url;
     }
+
+    // Rezept löschen (FR006)
+    const deleteButton = document.getElementById("delete-recipe");
+    deleteButton.addEventListener("click", () => {
+      if (confirm("Möchtest du dieses Rezept wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.")) {
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.style.display = "none";
+
+        const actionInput = document.createElement("input");
+        actionInput.type = "hidden";
+        actionInput.name = "action";
+        actionInput.value = "delete";
+
+        form.appendChild(actionInput);
+        document.body.appendChild(form);
+        form.submit();
+      }
+    });
   });
 </script>
