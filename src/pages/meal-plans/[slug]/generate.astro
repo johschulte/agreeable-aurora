@@ -31,6 +31,13 @@ try {
     return Astro.redirect("/meal-plans");
   }
   
+  // Einstellungen für Mahlzeitentypen aus der URL-Query abrufen (von select-recipes.astro)
+  const urlMealTypes = Astro.url.searchParams.get('meals');
+  if (urlMealTypes) {
+    // Setze die Mahlzeitentypen aus der URL-Query
+    mealPlan.meal_types = urlMealTypes.split(',');
+  }
+  
   // Alle Rezepte des Benutzers laden
   const allRecipes = await getUserRecipes(userId);
   
@@ -48,7 +55,7 @@ try {
       if (formData.get("action") === "reset") {
         // In a real app, you would delete all meal plan items from the database here
         // For now, we'll just reload the page
-        return Astro.redirect(`/meal-plans/${slug}/generate?reset=true`);
+        return Astro.redirect(`/meal-plans/${slug}/generate?reset=true&meals=${mealPlan.meal_types?.join(',')}`);
       }
       
       // Speichere die Zuordnungen von Rezepten zu Tagen/Mahlzeiten
@@ -86,26 +93,47 @@ try {
   
   // Wenn keine Einträge existieren, generiere einen neuen Plan
   if (mealPlan.items?.length === 0) {
-    // Rezepte basierend auf Swipe-Auswahl aus URL-Parameter laden
-    // In einer vollständigen App würden wir hier Rezepte mit "yes" Swipes aus der Datenbank laden
+    // Lade Rezepte, die vom Benutzer für diesen Speiseplan ausgewählt wurden
     
-    // Wähle einfach die neuesten Rezepte aus, um das Feature zu demonstrieren
-    selectedRecipes = await getUserRecipes(userId, {
-      sortBy: "created_at",
-      sortOrder: "desc",
-      limit: 20, // Begrenze auf eine angemessene Anzahl
-    });
+    // Prüfe, ob ausgewählte Rezept-IDs aus der URL übergeben wurden
+    const selectedRecipesParam = Astro.url.searchParams.get('selected_recipes');
+    let selectedRecipeIds = [];
     
-    // Priorisiere Rezepte, die noch nicht oder lange nicht mehr verwendet wurden
-    selectedRecipes.sort((a, b) => {
-      // Wenn ein Rezept noch nie verwendet wurde, hat es höhere Priorität
-      if (!a.last_used_at && b.last_used_at) return -1;
-      if (a.last_used_at && !b.last_used_at) return 1;
-      if (!a.last_used_at && !b.last_used_at) return 0;
+    if (selectedRecipesParam) {
+      // Rezept-IDs aus dem URL-Parameter extrahieren
+      selectedRecipeIds = selectedRecipesParam.split(',');
+    }
+    
+    // Alle Rezepte des Benutzers laden
+    const allUserRecipes = await getUserRecipes(userId);
+    
+    // Wenn aus der URL Rezept-IDs übergeben wurden, verwende nur diese
+    if (selectedRecipeIds.length > 0) {
+      selectedRecipes = allUserRecipes.filter(recipe => 
+        selectedRecipeIds.includes(recipe.id)
+      );
+    } 
+    // Sonst, falls vorhandene Einträge da sind, verwende diese
+    else if (existingRecipeIds.length > 0) {
+      selectedRecipes = allUserRecipes.filter(recipe => 
+        existingRecipeIds.includes(recipe.id)
+      );
+    } 
+    // Ansonsten verwende alle Rezepte als Auswahl
+    else {
+      selectedRecipes = allUserRecipes;
       
-      // Sonst sortiere nach letztem Verwendungsdatum (ältere Nutzung = höhere Priorität)
-      return new Date(a.last_used_at) - new Date(b.last_used_at);
-    });
+      // Priorisiere Rezepte, die noch nicht oder lange nicht mehr verwendet wurden
+      selectedRecipes.sort((a, b) => {
+        // Wenn ein Rezept noch nie verwendet wurde, hat es höhere Priorität
+        if (!a.last_used_at && b.last_used_at) return -1;
+        if (a.last_used_at && !b.last_used_at) return 1;
+        if (!a.last_used_at && !b.last_used_at) return 0;
+        
+        // Sonst sortiere nach letztem Verwendungsdatum (ältere Nutzung = höhere Priorität)
+        return new Date(a.last_used_at) - new Date(b.last_used_at);
+      });
+    }
     
     // Generiere einen Plan aus den verfügbaren Rezepten
     generatedPlan = generateMealPlan(mealPlan, selectedRecipes);
@@ -394,7 +422,7 @@ const planDates = getDaysBetween(mealPlan.start_date, mealPlan.end_date);
 </RecipeLayout>
 
 <script>
-  // Client-seitige Funktionalität
+  // Wir müssen die ausgewählten Rezepte aus der vorherigen Seite in localStorage speichern
   document.addEventListener('DOMContentLoaded', () => {
     // Rezeptauswahl aktualisieren
     const selects = document.querySelectorAll('select[name^="meal_"]');

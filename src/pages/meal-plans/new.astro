@@ -65,23 +65,24 @@ if (Astro.request.method === "POST") {
       name,
       start_date: startDate,
       end_date: endDate,
-      meal_types: includedMeals,
-      is_generated: false,
     };
     
     console.log("Erstelle Speiseplan:", mealPlanData);
     
+    // Wir speichern nur die Basisinformationen in der Datenbank
+    // Die Mahlzeitentypen werden später bei der Rezeptauswahl verwendet
     const mealPlan = await createMealPlan(
       userId,
       name,
       startDate,
-      endDate,
-      includedMeals
+      endDate
     );
     
     // Erfolgreich - leite zur Rezeptauswahl (Swipe) weiter
     successMessage = "Speiseplan erfolgreich erstellt!";
-    redirectUrl = `/meal-plans/${mealPlan.id}/select-recipes`;
+    
+    // Füge die ausgewählten Mahlzeiten als Query-Parameter zur Redirect-URL hinzu
+    redirectUrl = `/meal-plans/${mealPlan.id}/select-recipes?meals=${includedMeals.join(',')}`;
     
     // Umleitung nach kurzer Verzögerung
     if (redirectUrl) {

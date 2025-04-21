@@ -870,7 +870,7 @@ export async function getUserMealPlans(userId) {
 }
 
 // Einen Speiseplan erstellen
-export async function createMealPlan(userId, name, startDate, endDate, mealTypes = []) {
+export async function createMealPlan(userId, name, startDate, endDate) {
   try {
     const { data, error } = await supabase
       .from("meal_plans")
@@ -879,9 +879,7 @@ export async function createMealPlan(userId, name, startDate, endDate, mealTypes
           user_id: userId,
           name,
           start_date: startDate,
-          end_date: endDate,
-          meal_types: mealTypes,
-          is_generated: false
+          end_date: endDate
         },
       ])
       .select()

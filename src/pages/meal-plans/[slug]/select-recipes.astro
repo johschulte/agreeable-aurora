@@ -87,7 +87,7 @@ const totalNeededRecipes = dayCount * selectedMealTypes.length;
       </h1>
       <div class="flex items-center space-x-4">
         <a 
-          href={`/meal-plans/${slug}/generate`} 
+          href="#" 
           id="generatePlanLink"
           class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center opacity-50 cursor-not-allowed"
           aria-disabled="true"
@@ -311,9 +311,29 @@ const totalNeededRecipes = dayCount * selectedMealTypes.length;
         generatePlanLink.setAttribute('aria-disabled', 'false');
         finishSelectionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
         finishSelectionBtn.disabled = false;
+        
+        // Aktualisiere die URL des "Speiseplan generieren"-Links
+        const selectedRecipeIds = selectedRecipes.map(recipe => recipe.id);
+        let generateUrl = `/meal-plans/${mealPlanId}/generate`;
+        
+        // Füge die Mahlzeiten-Parameter aus der URL hinzu
+        const urlParams = new URLSearchParams(window.location.search);
+        const meals = urlParams.get('meals');
+        if (meals) {
+          generateUrl += `?meals=${meals}`;
+        }
+        
+        // Füge die ausgewählten Rezept-IDs als selected_recipes-Parameter hinzu
+        if (selectedRecipeIds.length > 0) {
+          generateUrl += (generateUrl.includes('?') ? '&' : '?') + `selected_recipes=${selectedRecipeIds.join(',')}`;
+        }
+        
+        // Setze die URL des Links
+        generatePlanLink.href = generateUrl;
       } else {
         generatePlanLink.classList.add('opacity-50', 'cursor-not-allowed');
         generatePlanLink.setAttribute('aria-disabled', 'true');
+        generatePlanLink.href = "#";
         finishSelectionBtn.classList.add('opacity-50', 'cursor-not-allowed');
         finishSelectionBtn.disabled = true;
       }
@@ -442,7 +462,26 @@ const totalNeededRecipes = dayCount * selectedMealTypes.length;
     // Event-Listener für den Abschluss-Button
     if (finishSelectionBtn) {
       finishSelectionBtn.addEventListener('click', () => {
-        window.location.href = `/meal-plans/${mealPlanId}/generate`;
+        // Sammle die IDs aller ausgewählten Rezepte
+        const selectedRecipeIds = selectedRecipes.map(recipe => recipe.id);
+        
+        // Erstelle die URL mit den ausgewählten Rezept-IDs
+        let generateUrl = `/meal-plans/${mealPlanId}/generate`;
+        
+        // Füge die Mahlzeiten-Parameter aus der URL hinzu
+        const urlParams = new URLSearchParams(window.location.search);
+        const meals = urlParams.get('meals');
+        if (meals) {
+          generateUrl += `?meals=${meals}`;
+        }
+        
+        // Füge die ausgewählten Rezept-IDs als selected_recipes-Parameter hinzu
+        if (selectedRecipeIds.length > 0) {
+          generateUrl += (generateUrl.includes('?') ? '&' : '?') + `selected_recipes=${selectedRecipeIds.join(',')}`;
+        }
+        
+        // Navigiere zur generierten URL
+        window.location.href = generateUrl;
       });
     }
     
