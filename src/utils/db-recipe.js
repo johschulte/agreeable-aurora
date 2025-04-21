@@ -55,26 +55,22 @@ export async function getUserRecipes(userId, options = {}) {
   } = options;
 
   try {
-    let query = supabase
-      .from("recipes")
-      .select(
-        `
-        *,
-        ingredients(*),
-        instructions(*),
-        recipe_tags(
-          tag_id,
-          tags(*)
-        )
-      `
-      )
-      .eq("user_id", userId)
-      .order(sortBy, { ascending: sortOrder === "asc" })
-      .limit(limit);
+    // Debug-Logging der Eingabeparameter
+    console.log("DEBUG - getUserRecipes called with options:", {
+      userId,
+      sortBy,
+      sortOrder,
+      limit,
+      tags,
+    });
+
+    let query;
 
     // Filtern nach Tags, wenn vorhanden
     if (tags && tags.length > 0) {
-      // Verwende einen spezifischen Join für Rezepte mit den angegebenen Tags
+      console.log("DEBUG - Building query WITH tag filter for tags:", tags);
+      
+      // Verwende eine spezifische Abfrage mit INNER JOIN für Tag-Filterung
       query = supabase
         .from("recipes")
         .select(
@@ -89,15 +85,53 @@ export async function getUserRecipes(userId, options = {}) {
         `
         )
         .eq("user_id", userId)
-        .in("recipe_tags.tag_id", tags)
+        .in("recipe_tags.tag_id", tags);
+      
+      // Die toSQL()-Methode existiert nicht im Supabase-Client
+      // console.log("DEBUG - SQL Query with tags:", query.toSQL());
+      
+      const { data, error } = await query
         .order(sortBy, { ascending: sortOrder === "asc" })
         .limit(limit);
+
+      if (error) {
+        console.error("DEBUG - Error in tag filtered query:", error);
+        throw error;
+      }
+      
+      console.log(`DEBUG - Retrieved ${data?.length || 0} recipes with tag filter`);
+      return data || [];
+    } else {
+      console.log("DEBUG - Building query WITHOUT tag filter");
+      
+      // Standardabfrage ohne Tag-Filter, aber mit LEFT JOIN für Tag-Informationen
+      query = supabase
+        .from("recipes")
+        .select(
+          `
+          *,
+          ingredients(*),
+          instructions(*),
+          recipe_tags(
+            tag_id,
+            tags(*)
+          )
+        `
+        )
+        .eq("user_id", userId);
+      
+      const { data, error } = await query
+        .order(sortBy, { ascending: sortOrder === "asc" })
+        .limit(limit);
+
+      if (error) {
+        console.error("DEBUG - Error in standard query:", error);
+        throw error;
+      }
+      
+      console.log(`DEBUG - Retrieved ${data?.length || 0} recipes without tag filter`);
+      return data || [];
     }
-
-    const { data, error } = await query;
-
-    if (error) throw error;
-    return data || [];
   } catch (error) {
     console.error("Fehler beim Abrufen der Rezepte:", error);
     throw error;

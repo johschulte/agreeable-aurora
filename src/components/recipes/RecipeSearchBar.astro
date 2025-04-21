@@ -2,19 +2,20 @@
 // RecipeSearchBar-Komponente für die Suche und Filterung von Rezepten
 // Implementiert die Anforderungen FR008 (Rezeptbibliothek suchen) und FR009 (Rezeptbibliothek filtern)
 
-// Optional können Tags als Props übergeben werden
-const { availableTags = [] } = Astro.props;
+// Props, die von der übergeordneten Komponente übergeben werden
+const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, timeFilter = "all" } = Astro.props;
 ---
 
 <div class="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
-  <form id="searchForm" class="space-y-4">
+  <form id="searchForm" action="/recipes" method="GET" class="space-y-4">
     <!-- Suchfeld -->
     <div>
       <div class="relative">
         <input
           type="text"
           id="searchQuery"
-          name="q"
+          name="searchTerm"
+          value={searchTerm}
           placeholder="Nach Rezepten oder Zutaten suchen..."
           class="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         />
@@ -36,7 +37,8 @@ const { availableTags = [] } = Astro.props;
         <button
           type="button"
           id="clearSearch"
-          class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 hidden"
+          class="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+          style={searchTerm ? "" : "display: none;"}
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
@@ -46,7 +48,7 @@ const { availableTags = [] } = Astro.props;
           >
             <path
               fill-rule="evenodd"
-              d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72 1.72a.75.75 0 101.06-1.06L13.06 12l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z"
+              d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-1.72 6.97a.75.75 0 10-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 101.06 1.06L12 13.06l1.72-1.72a.75.75 0 10-1.06-1.06L12 10.94l-1.72-1.72z"
               clip-rule="evenodd"></path>
           </svg>
         </button>
@@ -54,7 +56,7 @@ const { availableTags = [] } = Astro.props;
     </div>
 
     <!-- Filter-Optionen -->
-    <div class="flex flex-wrap gap-4">
+    <div id="advancedFilters" class={`flex flex-wrap gap-4 ${showAdvanced ? "" : "hidden"}`}>
       <!-- Zeitfilter -->
       <div class="w-full md:w-auto">
         <label
@@ -64,222 +66,136 @@ const { availableTags = [] } = Astro.props;
         >
         <select
           id="timeFilter"
-          name="time"
+          name="timeFilter"
           class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         >
-          <option value="">Alle Zeiten</option>
-          <option value="15">Unter 15 Minuten</option>
-          <option value="30">Unter 30 Minuten</option>
-          <option value="45">Unter 45 Minuten</option>
-          <option value="60">Unter 1 Stunde</option>
-          <option value="120">Unter 2 Stunden</option>
+          <option value="all" selected={timeFilter === "all"}>Alle Zeiten</option>
+          <option value="15" selected={timeFilter === "15"}>Unter 15 Minuten</option>
+          <option value="30" selected={timeFilter === "30"}>Unter 30 Minuten</option>
+          <option value="45" selected={timeFilter === "45"}>Unter 45 Minuten</option>
+          <option value="60" selected={timeFilter === "60"}>Unter 1 Stunde</option>
+          <option value="120" selected={timeFilter === "120"}>Unter 2 Stunden</option>
         </select>
       </div>
 
-      <!-- Tag-Filter (wenn Tags verfügbar sind) -->
-      {
-        availableTags.length > 0 && (
-          <div class="w-full md:w-auto flex-grow">
-            <label
-              for="tagFilter"
-              class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-            >
-              Tags
-            </label>
-            <div class="relative">
-              <select
-                id="tagFilter"
-                name="tag"
-                class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
-              >
-                <option value="">Alle Tags</option>
-                {availableTags.map((tag) => (
-                  <option value={tag.id}>{tag.name}</option>
-                ))}
-              </select>
-            </div>
+      <!-- Tag-Filter -->
+      {allTags.length > 0 && (
+        <div class="w-full flex-grow">
+          <label
+            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          >
+            Tags
+          </label>
+          <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-gray-300 dark:border-gray-600 rounded-md">
+            {allTags.map((tag) => (
+              <label class="inline-flex items-center px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  name="tag"
+                  value={tag.id}
+                  checked={selectedTags.includes(tag.id.toString())}
+                  class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded mr-2"
+                />
+                <span class="text-sm text-gray-700 dark:text-gray-300">
+                  {tag.name}
+                </span>
+              </label>
+            ))}
           </div>
-        )
-      }
+        </div>
+      )}
+    </div>
 
-      <!-- Sortier-Option -->
-      <div class="w-full md:w-auto">
-        <label
-          for="sortOption"
-          class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >Sortieren nach</label
+    <!-- Button-Leiste -->
+    <div class="flex justify-between items-center">
+      <button
+        type="button"
+        id="toggleAdvanced"
+        class="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-1">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+        </svg>
+        <span id="advancedLabel">
+          {showAdvanced ? "Filter ausblenden" : "Erweiterte Filter"}
+        </span>
+      </button>
+
+      <div class="flex space-x-2">
+        <a
+          href="/recipes"
+          class="px-3 py-1.5 bg-gray-100 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
         >
-        <select
-          id="sortOption"
-          name="sort"
-          class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
+          Zurücksetzen
+        </a>
+        <button
+          type="submit"
+          class="px-3 py-1.5 bg-emerald-100 dark:bg-emerald-900/20 border border-emerald-300 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded hover:bg-emerald-200 dark:hover:bg-emerald-900/30 transition-colors text-sm"
         >
-          <option value="newest">Neueste zuerst</option>
-          <option value="oldest">Älteste zuerst</option>
-          <option value="az">A-Z</option>
-          <option value="za">Z-A</option>
-          <option value="time_asc">Kürzeste Zubereitungszeit</option>
-          <option value="time_desc">Längste Zubereitungszeit</option>
-        </select>
+          Filter anwenden
+        </button>
       </div>
     </div>
 
     <!-- Aktive Filter-Anzeige -->
-    <div id="activeFilters" class="flex flex-wrap gap-2 pt-2 hidden">
-      <!-- Hier werden aktive Filter als Tags angezeigt (via JavaScript) -->
+    <div id="activeFilters" class="flex flex-wrap gap-2 pt-2" style={showAdvanced ? "" : "display: none;"}>
+      <!-- Hier werden aktive Filter als Tags angezeigt -->
     </div>
   </form>
 </div>
 
-<script>
+<script define:vars={{ searchTerm, showAdvanced, timeFilter, selectedTags }}>
   document.addEventListener("DOMContentLoaded", () => {
     const searchForm = document.getElementById("searchForm");
     const searchInput = document.getElementById("searchQuery");
     const clearButton = document.getElementById("clearSearch");
-    const timeFilter = document.getElementById("timeFilter");
-    const tagFilter = document.getElementById("tagFilter");
-    const sortOption = document.getElementById("sortOption");
+    const timeFilterSelect = document.getElementById("timeFilter");
+    const toggleButton = document.getElementById("toggleAdvanced");
+    const advancedFilters = document.getElementById("advancedFilters");
+    const advancedLabel = document.getElementById("advancedLabel");
     const activeFiltersContainer = document.getElementById("activeFilters");
+    
+    // Starteinstellungen
+    let isAdvancedVisible = showAdvanced;
 
-    // Funktion zum Auslösen der Suche/Filterung
-    function triggerSearch() {
-      // Aktive Filter anzeigen
-      updateActiveFilters();
-
-      // Hier würde in einer echten Implementierung der API-Aufruf für die Suche erfolgen
-      // Für dieses Beispiel geben wir nur die Filterkriterien in der Konsole aus
-      const searchParams = {
-        query: searchInput.value,
-        timeFilter: timeFilter.value,
-        tagFilter: tagFilter?.value || null,
-        sortOption: sortOption.value,
-      };
-
-      console.log("Suche mit Parametern:", searchParams);
-
-      // Event auslösen, damit andere Komponenten auf die Suche reagieren können
-      const searchEvent = new CustomEvent("recipe-search", {
-        detail: searchParams,
-        bubbles: true,
-      });
-      searchForm.dispatchEvent(searchEvent);
-    }
-
-    // Aktive Filter als Tags anzeigen
-    function updateActiveFilters() {
-      // Container leeren
-      activeFiltersContainer.innerHTML = "";
-
-      let hasActiveFilters = false;
-
-      // Suchbegriff
-      if (searchInput.value) {
-        addFilterTag("Suchbegriff: " + searchInput.value, "query");
-        hasActiveFilters = true;
-        clearButton.classList.remove("hidden");
+    // Toggle-Funktion für erweiterte Filter
+    toggleButton.addEventListener("click", () => {
+      isAdvancedVisible = !isAdvancedVisible;
+      if (isAdvancedVisible) {
+        advancedFilters.classList.remove("hidden");
+        activeFiltersContainer.style.display = "";
+        advancedLabel.textContent = "Filter ausblenden";
       } else {
-        clearButton.classList.add("hidden");
+        advancedFilters.classList.add("hidden");
+        activeFiltersContainer.style.display = "none";
+        advancedLabel.textContent = "Erweiterte Filter";
       }
-
-      // Zeitfilter
-      if (timeFilter.value) {
-        const selectedOption = timeFilter.options[timeFilter.selectedIndex];
-        addFilterTag(selectedOption.text, "time");
-        hasActiveFilters = true;
-      }
-
-      // Tag-Filter
-      if (tagFilter && tagFilter.value) {
-        const selectedOption = tagFilter.options[tagFilter.selectedIndex];
-        addFilterTag(selectedOption.text, "tag");
-        hasActiveFilters = true;
-      }
-
-      // Sortierung (optional, je nach UI-Design)
-      if (sortOption.value !== "newest") {
-        const selectedOption = sortOption.options[sortOption.selectedIndex];
-        addFilterTag("Sortierung: " + selectedOption.text, "sort");
-        hasActiveFilters = true;
-      }
-
-      // Container ein-/ausblenden
-      if (hasActiveFilters) {
-        activeFiltersContainer.classList.remove("hidden");
-      } else {
-        activeFiltersContainer.classList.add("hidden");
-      }
-    }
-
-    // Hilfsfunktion zum Hinzufügen eines Filter-Tags
-    function addFilterTag(text, type) {
-      const tag = document.createElement("div");
-      tag.className =
-        "inline-flex items-center bg-emerald-50 dark:bg-emerald-900/30 text-emerald-800 dark:text-emerald-300 rounded-full px-3 py-1 text-sm";
-      tag.dataset.filterType = type;
-
-      tag.innerHTML = `
-        ${text}
-        <button type="button" class="ml-1 text-emerald-600 dark:text-emerald-400 hover:text-emerald-800 dark:hover:text-emerald-200 focus:outline-none">
-          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4">
-            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
-          </svg>
-        </button>
-      `;
-
-      // Event-Listener zum Entfernen des Filters
-      tag.querySelector("button").addEventListener("click", () => {
-        removeFilter(type);
-      });
-
-      activeFiltersContainer.appendChild(tag);
-    }
-
-    // Filter entfernen
-    function removeFilter(type) {
-      if (type === "query") {
-        searchInput.value = "";
-        clearButton.classList.add("hidden");
-      } else if (type === "time") {
-        timeFilter.value = "";
-      } else if (type === "tag" && tagFilter) {
-        tagFilter.value = "";
-      } else if (type === "sort") {
-        sortOption.value = "newest";
-      }
-
-      // Suche neu auslösen
-      triggerSearch();
-    }
-
-    // Event-Listener für Formular-Änderungen
-    searchInput.addEventListener("input", () => {
-      if (searchInput.value) {
-        clearButton.classList.remove("hidden");
-      } else {
-        clearButton.classList.add("hidden");
-      }
-      triggerSearch();
     });
 
-    // Clear-Button
+    // Suchfeld löschen
     clearButton.addEventListener("click", () => {
       searchInput.value = "";
-      clearButton.classList.add("hidden");
-      triggerSearch();
+      clearButton.style.display = "none";
     });
 
-    // Dropdown-Filter
-    timeFilter.addEventListener("change", triggerSearch);
-    if (tagFilter) tagFilter.addEventListener("change", triggerSearch);
-    sortOption.addEventListener("change", triggerSearch);
-
-    // Verhindern, dass das Formular abgeschickt wird
-    searchForm.addEventListener("submit", (e) => {
-      e.preventDefault();
-      triggerSearch();
+    // Suchfeld-Handler
+    searchInput.addEventListener("input", () => {
+      if (searchInput.value) {
+        clearButton.style.display = "";
+      } else {
+        clearButton.style.display = "none";
+      }
     });
 
-    // Initialen Zustand setzen
-    updateActiveFilters();
+    // Setze den Wert des Zeitfilters
+    if (timeFilter) {
+      timeFilterSelect.value = timeFilter;
+      console.log("Setting time filter to:", timeFilter);
+    }
+
+    // Debug-Ausgabe für aktive Filter
+    console.log("Active filters - searchTerm:", searchTerm);
+    console.log("Active filters - timeFilter:", timeFilter);
+    console.log("Active filters - selectedTags:", selectedTags);
   });
 </script>
