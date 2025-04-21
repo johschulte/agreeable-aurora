@@ -935,6 +935,14 @@ export async function addRecipeToMealPlan(
   mealType
 ) {
   try {
+    // Umwandlung des mealType in die korrekte Form mit Großbuchstaben am Anfang
+    // für die Datenbank-Constraint-Validierung
+    let formattedMealType = mealType;
+    if (mealType === 'breakfast') formattedMealType = 'Breakfast';
+    if (mealType === 'lunch') formattedMealType = 'Lunch';
+    if (mealType === 'dinner') formattedMealType = 'Dinner';
+    if (mealType === 'snack') formattedMealType = 'Snack';
+
     const { data, error } = await supabase
       .from("meal_plan_items")
       .insert([
@@ -942,7 +950,7 @@ export async function addRecipeToMealPlan(
           meal_plan_id: mealPlanId,
           recipe_id: recipeId,
           meal_date: mealDate,
-          meal_type: mealType,
+          meal_type: formattedMealType,
         },
       ])
       .select()
