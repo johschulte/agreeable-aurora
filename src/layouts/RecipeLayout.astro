@@ -35,7 +35,26 @@ const user = {
               >RecipeApp</span
             >
           </a>
-          <nav class="flex items-center space-x-6">
+          
+          <!-- Mobile Menü Button (nur auf kleinen Bildschirmen sichtbar) -->
+          <button 
+            id="mobile-menu-button" 
+            class="md:hidden inline-flex items-center justify-center p-2 rounded-md text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500 hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none"
+            aria-expanded="false"
+          >
+            <span class="sr-only">Menü öffnen</span>
+            <!-- Icon für geschlossenes Menü -->
+            <svg id="menu-closed-icon" class="block h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16"></path>
+            </svg>
+            <!-- Icon für geöffnetes Menü -->
+            <svg id="menu-open-icon" class="hidden h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+            </svg>
+          </button>
+          
+          <!-- Desktop-Navigation (auf kleinen Bildschirmen ausgeblendet) -->
+          <nav class="hidden md:flex items-center space-x-6">
             <a
               href="/recipes"
               class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500"
@@ -52,8 +71,33 @@ const user = {
               >Einkaufslisten</a
             >
           </nav>
-          <div class="flex items-center space-x-4">
+          
+          <div class="hidden md:flex items-center space-x-4">
             <div class="text-sm text-gray-700 dark:text-gray-300">
+              <span>Hallo, {user.name}</span>
+            </div>
+          </div>
+        </div>
+        
+        <!-- Mobile-Navigation (ausklappbares Menü) -->
+        <div id="mobile-menu" class="hidden md:hidden mt-4 pb-2">
+          <div class="flex flex-col space-y-3">
+            <a
+              href="/recipes"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500 py-2"
+              >Rezepte</a
+            >
+            <a
+              href="/meal-plans"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500 py-2"
+              >Speisepläne</a
+            >
+            <a
+              href="/shopping-lists"
+              class="font-medium text-gray-700 dark:text-gray-300 hover:text-emerald-600 dark:hover:text-emerald-500 py-2"
+              >Einkaufslisten</a
+            >
+            <div class="text-sm text-gray-700 dark:text-gray-300 pt-2 border-t border-gray-200 dark:border-gray-700">
               <span>Hallo, {user.name}</span>
             </div>
           </div>
@@ -67,8 +111,8 @@ const user = {
 
     <footer class="bg-gray-100 dark:bg-gray-800 py-6 mt-12">
       <div class="container mx-auto px-4">
-        <div class="flex justify-between items-center">
-          <div class="text-sm text-gray-500 dark:text-gray-400">
+        <div class="flex flex-col md:flex-row justify-between items-center">
+          <div class="text-sm text-gray-500 dark:text-gray-400 mb-3 md:mb-0">
             &copy; {new Date().getFullYear()} RecipeApp
           </div>
           <div class="text-sm text-gray-500 dark:text-gray-400">
@@ -79,5 +123,30 @@ const user = {
         </div>
       </div>
     </footer>
+    
+    <script>
+      // Mobile Menü Funktionalität
+      document.addEventListener('DOMContentLoaded', () => {
+        const mobileMenuButton = document.getElementById('mobile-menu-button');
+        const mobileMenu = document.getElementById('mobile-menu');
+        const menuClosedIcon = document.getElementById('menu-closed-icon');
+        const menuOpenIcon = document.getElementById('menu-open-icon');
+        
+        if (mobileMenuButton && mobileMenu) {
+          mobileMenuButton.addEventListener('click', () => {
+            // Toggle mobile menu
+            mobileMenu.classList.toggle('hidden');
+            
+            // Toggle icons
+            menuClosedIcon.classList.toggle('hidden');
+            menuOpenIcon.classList.toggle('hidden');
+            
+            // Toggle aria-expanded
+            const isExpanded = mobileMenuButton.getAttribute('aria-expanded') === 'true';
+            mobileMenuButton.setAttribute('aria-expanded', !isExpanded);
+          });
+        }
+      });
+    </script>
   </body>
 </html>
