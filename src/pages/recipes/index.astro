@@ -58,6 +58,21 @@ try {
   // Lade Rezepte, eventuell mit Tag-Filtern
   recipes = await getUserRecipes(userId, options);
 
+  // Verarbeite die Tags-Daten für jedes Rezept, damit sie in der RecipeCard genutzt werden können
+  recipes = recipes.map(recipe => {
+    // Formatiere die verschachtelten Tag-Daten in ein einfaches Array
+    const tags = recipe.recipe_tags ? 
+      recipe.recipe_tags
+        .filter(rt => rt.tags) // Filtere ungültige Einträge
+        .map(rt => rt.tags) // Extrahiere das tags-Objekt
+      : [];
+
+    return {
+      ...recipe,
+      tags // Füge das tags-Array direkt am Rezeptobjekt hinzu
+    };
+  });
+
   // Clientseitig filtern nach Suchbegriff
   if (searchTerm) {
     const searchLower = searchTerm.toLowerCase();
