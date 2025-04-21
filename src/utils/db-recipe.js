@@ -62,7 +62,7 @@ export async function getUserRecipes(userId, options = {}) {
         *,
         ingredients(*),
         instructions(*),
-        recipe_tags!inner(
+        recipe_tags(
           tag_id,
           tags(*)
         )
@@ -74,7 +74,24 @@ export async function getUserRecipes(userId, options = {}) {
 
     // Filtern nach Tags, wenn vorhanden
     if (tags && tags.length > 0) {
-      query = query.in("recipe_tags.tag_id", tags);
+      // Verwende einen spezifischen Join für Rezepte mit den angegebenen Tags
+      query = supabase
+        .from("recipes")
+        .select(
+          `
+          *,
+          ingredients(*),
+          instructions(*),
+          recipe_tags!inner(
+            tag_id,
+            tags(*)
+          )
+        `
+        )
+        .eq("user_id", userId)
+        .in("recipe_tags.tag_id", tags)
+        .order(sortBy, { ascending: sortOrder === "asc" })
+        .limit(limit);
     }
 
     const { data, error } = await query;
