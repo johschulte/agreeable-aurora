@@ -323,7 +323,7 @@ export async function importRecipeFromUrl(url, userId) {
   try {
     // Normalisiere URL
     const normalizedUrl = normalizeUrl(url);
-    
+
     // Initialisiere Standardantwort (für den Fall, dass kein Parsing möglich ist)
     let recipeData = {
       url: normalizedUrl,
@@ -335,135 +335,165 @@ export async function importRecipeFromUrl(url, userId) {
       servings: 4,
       source_url: normalizedUrl,
       ingredients: [],
-      instructions: []
+      instructions: [],
     };
 
     try {
       // Anfrage an die URL senden und HTML-Inhalt erhalten
       const response = await fetch(normalizedUrl, {
         headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        }
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+        },
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! Status: ${response.status}`);
       }
-      
+
       const html = await response.text();
-      
+
       // Spezialfall: Cookidoo-Rezepte erkennen und speziell verarbeiten
-      if (normalizedUrl.includes('cookidoo.') || html.includes('cookidoo')) {
+      if (normalizedUrl.includes("cookidoo.") || html.includes("cookidoo")) {
         const cookidooData = parseCookidooRecipe(html, normalizedUrl);
         if (cookidooData) {
           // Daten aus der speziellen Cookidoo-Verarbeitung übernehmen
           recipeData = {
             ...recipeData,
-            ...cookidooData
+            ...cookidooData,
           };
-          
+
           // Da Cookidoo speziell verarbeitet wurde, hier beenden
           return {
             success: true,
             message: "Cookidoo-Rezept erfolgreich importiert.",
-            data: recipeData
+            data: recipeData,
           };
         }
       }
-      
+
       // Einfaches Parsing basierend auf Strukturelementen und häufigen Metadaten
       // Häufige Strukturen für Rezeptseiten erkennen
-      
+
       // 1. JSON-LD Schema.org-Daten suchen (die meisten modernen Rezeptseiten verwenden dies)
-      const jsonLdMatches = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi);
+      const jsonLdMatches = html.match(
+        /<script type="application\/ld\+json">([\s\S]*?)<\/script>/gi
+      );
       if (jsonLdMatches) {
         for (const match of jsonLdMatches) {
           try {
-            const jsonContent = match.replace(/<script type="application\/ld\+json">|<\/script>/gi, '');
+            const jsonContent = match.replace(
+              /<script type="application\/ld\+json">|<\/script>/gi,
+              ""
+            );
             const jsonData = JSON.parse(jsonContent);
-            
+
             // Prüfen, ob es sich um ein Rezept handelt
-            if (jsonData['@type'] === 'Recipe' || 
-                (Array.isArray(jsonData['@graph']) && 
-                 jsonData['@graph'].some(item => item['@type'] === 'Recipe'))) {
-              
+            if (
+              jsonData["@type"] === "Recipe" ||
+              (Array.isArray(jsonData["@graph"]) &&
+                jsonData["@graph"].some((item) => item["@type"] === "Recipe"))
+            ) {
               // Direkte Rezeptdaten oder aus dem Graph extrahieren
-              const recipeJson = jsonData['@type'] === 'Recipe' ? 
-                jsonData : 
-                jsonData['@graph'].find(item => item['@type'] === 'Recipe');
-              
+              const recipeJson =
+                jsonData["@type"] === "Recipe"
+                  ? jsonData
+                  : jsonData["@graph"].find(
+                      (item) => item["@type"] === "Recipe"
+                    );
+
               if (recipeJson) {
                 // Extrahiere relevante Daten
                 recipeData.title = recipeJson.name || recipeData.title;
-                recipeData.description = recipeJson.description || recipeData.description;
-                
+                recipeData.description =
+                  recipeJson.description || recipeData.description;
+
                 // Zeiten extrahieren und in Minuten umwandeln
                 if (recipeJson.prepTime) {
-                  const prepMinutes = convertISODurationToMinutes(recipeJson.prepTime);
+                  const prepMinutes = convertISODurationToMinutes(
+                    recipeJson.prepTime
+                  );
                   if (prepMinutes) recipeData.prep_time_minutes = prepMinutes;
                 }
-                
+
                 if (recipeJson.cookTime) {
-                  const cookMinutes = convertISODurationToMinutes(recipeJson.cookTime);
+                  const cookMinutes = convertISODurationToMinutes(
+                    recipeJson.cookTime
+                  );
                   if (cookMinutes) recipeData.cook_time_minutes = cookMinutes;
                 }
-                
+
                 // Portionen
                 if (recipeJson.recipeYield) {
                   const servings = parseServings(recipeJson.recipeYield);
                   if (servings) recipeData.servings = servings;
                 }
-                
+
                 // Hauptbild
                 if (recipeJson.image) {
-                  if (typeof recipeJson.image === 'string') {
+                  if (typeof recipeJson.image === "string") {
                     recipeData.image_path = recipeJson.image;
-                  } else if (Array.isArray(recipeJson.image) && recipeJson.image.length > 0) {
+                  } else if (
+                    Array.isArray(recipeJson.image) &&
+                    recipeJson.image.length > 0
+                  ) {
                     recipeData.image_path = recipeJson.image[0];
                   } else if (recipeJson.image.url) {
                     recipeData.image_path = recipeJson.image.url;
                   }
                 }
-                
+
                 // Zutaten
-                if (recipeJson.recipeIngredient && Array.isArray(recipeJson.recipeIngredient)) {
-                  recipeData.ingredients = recipeJson.recipeIngredient.map((ingredient, index) => {
-                    const parsedIngredient = parseIngredient(ingredient);
-                    return {
-                      name: parsedIngredient.name,
-                      quantity: parsedIngredient.quantity,
-                      unit: parsedIngredient.unit,
-                      display_order: index
-                    };
-                  });
+                if (
+                  recipeJson.recipeIngredient &&
+                  Array.isArray(recipeJson.recipeIngredient)
+                ) {
+                  recipeData.ingredients = recipeJson.recipeIngredient.map(
+                    (ingredient, index) => {
+                      const parsedIngredient = parseIngredient(ingredient);
+                      return {
+                        name: parsedIngredient.name,
+                        quantity: parsedIngredient.quantity,
+                        unit: parsedIngredient.unit,
+                        display_order: index,
+                      };
+                    }
+                  );
                 }
-                
+
                 // Anweisungen
                 if (recipeJson.recipeInstructions) {
                   let allInstructions = "";
-                  
+
                   if (Array.isArray(recipeJson.recipeInstructions)) {
                     // Alle Anweisungen in einen Text zusammenfassen
-                    allInstructions = recipeJson.recipeInstructions.map((instruction, index) => {
-                      // Wenn es ein Objekt mit text ist, verwende das
-                      const text = typeof instruction === 'object' ? 
-                        (instruction.text || instruction.name || '') : 
-                        instruction;
-                      
-                      return `${index + 1}. ${text}`;
-                    }).join("\n\n");
-                  } else if (typeof recipeJson.recipeInstructions === 'string') {
+                    allInstructions = recipeJson.recipeInstructions
+                      .map((instruction, index) => {
+                        // Wenn es ein Objekt mit text ist, verwende das
+                        const text =
+                          typeof instruction === "object"
+                            ? instruction.text || instruction.name || ""
+                            : instruction;
+
+                        return `${index + 1}. ${text}`;
+                      })
+                      .join("\n\n");
+                  } else if (
+                    typeof recipeJson.recipeInstructions === "string"
+                  ) {
                     // Falls es ein einzelner String ist, verwende ihn direkt
                     allInstructions = recipeJson.recipeInstructions;
                   }
-                  
+
                   // Alle Anweisungen als einen einzigen Schritt speichern
-                  recipeData.instructions = [{
-                    step_number: 1,
-                    description: allInstructions
-                  }];
+                  recipeData.instructions = [
+                    {
+                      step_number: 1,
+                      description: allInstructions,
+                    },
+                  ];
                 }
-                
+
                 // Bei erfolgreicher Extraktion aus JSON-LD abbrechen
                 break;
               }
@@ -474,86 +504,103 @@ export async function importRecipeFromUrl(url, userId) {
           }
         }
       }
-      
+
       // Wenn keine Zutaten oder Anweisungen gefunden wurden, versuche HTML-Parsing
-      if (recipeData.ingredients.length === 0 || recipeData.instructions.length === 0) {
+      if (
+        recipeData.ingredients.length === 0 ||
+        recipeData.instructions.length === 0
+      ) {
         // 2. HTML-basiertes Parsing für häufige Rezeptklassen
-        
+
         // Versuch, Zutaten zu finden
         if (recipeData.ingredients.length === 0) {
           const ingredientSelectors = [
-            'ul.ingredients li', 
-            '.ingredients-list li',
-            '.recipe-ingredients li',
+            "ul.ingredients li",
+            ".ingredients-list li",
+            ".recipe-ingredients li",
             '[itemprop="recipeIngredient"]',
-            '.ingredient-item'
+            ".ingredient-item",
           ];
-          
+
           for (const selector of ingredientSelectors) {
-            const regex = new RegExp(`<${selector.replace('.', ' class="[^"]*')}[^>]*>(.*?)<\/`, 'gi');
+            const regex = new RegExp(
+              `<${selector.replace(".", ' class="[^"]*')}[^>]*>(.*?)<\/`,
+              "gi"
+            );
             const matches = [...html.matchAll(regex)];
-            
+
             if (matches.length > 0) {
               recipeData.ingredients = matches.map((match, index) => {
-                const text = match[1].replace(/<[^>]*>/g, '').trim();
+                const text = match[1].replace(/<[^>]*>/g, "").trim();
                 const parsedIngredient = parseIngredient(text);
                 return {
                   name: parsedIngredient.name,
                   quantity: parsedIngredient.quantity,
                   unit: parsedIngredient.unit,
-                  display_order: index
+                  display_order: index,
                 };
               });
               break;
             }
           }
         }
-        
+
         // Versuch, Anweisungen zu finden
         if (recipeData.instructions.length === 0) {
           const instructionSelectors = [
-            'ol.instructions li',
-            '.recipe-instructions li',
-            '.recipe-steps li',
+            "ol.instructions li",
+            ".recipe-instructions li",
+            ".recipe-steps li",
             '[itemprop="recipeInstructions"]',
-            '.step-item'
+            ".step-item",
           ];
-          
+
           for (const selector of instructionSelectors) {
-            const regex = new RegExp(`<${selector.replace('.', ' class="[^"]*')}[^>]*>(.*?)<\/`, 'gi');
+            const regex = new RegExp(
+              `<${selector.replace(".", ' class="[^"]*')}[^>]*>(.*?)<\/`,
+              "gi"
+            );
             const matches = [...html.matchAll(regex)];
-            
+
             if (matches.length > 0) {
               // Alle Anweisungen in einen Text zusammenfassen
-              const allInstructions = matches.map((match, index) => {
-                const text = match[1].replace(/<[^>]*>/g, '').trim();
-                return `${index + 1}. ${text}`;
-              }).join("\n\n");
-              
+              const allInstructions = matches
+                .map((match, index) => {
+                  const text = match[1].replace(/<[^>]*>/g, "").trim();
+                  return `${index + 1}. ${text}`;
+                })
+                .join("\n\n");
+
               // Als ein einziger Schritt speichern
-              recipeData.instructions = [{
-                step_number: 1,
-                description: allInstructions
-              }];
+              recipeData.instructions = [
+                {
+                  step_number: 1,
+                  description: allInstructions,
+                },
+              ];
               break;
             }
           }
         }
-        
+
         // Versuche, den Titel zu finden, falls noch nicht gefunden
         if (recipeData.title === "Importiertes Rezept") {
-          const titleMatch = html.match(/<h1[^>]*>(.*?)<\/h1>/i) || 
-                           html.match(/<title[^>]*>(.*?)<\/title>/i);
+          const titleMatch =
+            html.match(/<h1[^>]*>(.*?)<\/h1>/i) ||
+            html.match(/<title[^>]*>(.*?)<\/title>/i);
           if (titleMatch) {
             recipeData.title = titleMatch[1]
-              .replace(/<[^>]*>/g, '')
-              .replace(/\s+/g, ' ')
+              .replace(/<[^>]*>/g, "")
+              .replace(/\s+/g, " ")
               .trim();
           }
         }
       }
     } catch (fetchError) {
-      console.error("Fehler beim Abrufen oder Parsen der Rezeptseite:", fetchError);
+      console.error(
+        "Fehler beim Abrufen oder Parsen der Rezeptseite:",
+        fetchError
+      );
       // Bei Fehler werden die Standarddaten verwendet
     }
 
@@ -561,21 +608,21 @@ export async function importRecipeFromUrl(url, userId) {
     if (recipeData.ingredients.length === 0) {
       recipeData.ingredients = [
         { name: "Zutat 1", quantity: 100, unit: "g", display_order: 0 },
-        { name: "Zutat 2", quantity: 2, unit: "EL", display_order: 1 }
+        { name: "Zutat 2", quantity: 2, unit: "EL", display_order: 1 },
       ];
     }
-    
+
     if (recipeData.instructions.length === 0) {
       recipeData.instructions = [
         { step_number: 1, description: "Erster Schritt" },
-        { step_number: 2, description: "Zweiter Schritt" }
+        { step_number: 2, description: "Zweiter Schritt" },
       ];
     }
 
     return {
       success: true,
       message: "Rezept erfolgreich importiert.",
-      data: recipeData
+      data: recipeData,
     };
   } catch (error) {
     console.error("Fehler beim Importieren des Rezepts:", error);
@@ -593,53 +640,60 @@ function parseCookidooRecipe(html, url) {
     const recipeData = {
       source_url: url,
       ingredients: [],
-      instructions: []
+      instructions: [],
     };
-    
+
     // JSON-LD Daten aus der Seite extrahieren
-    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+    const jsonLdMatch = html.match(
+      /<script type="application\/ld\+json">([\s\S]*?)<\/script>/i
+    );
     if (jsonLdMatch) {
       try {
         const jsonData = JSON.parse(jsonLdMatch[1]);
-        if (jsonData['@type'] === 'Recipe') {
+        if (jsonData["@type"] === "Recipe") {
           // Grunddaten extrahieren
           recipeData.title = jsonData.name || "";
-          
+
           // Portionen
           if (jsonData.recipeYield) {
             const servings = parseServings(jsonData.recipeYield);
             if (servings) recipeData.servings = servings;
           }
-          
+
           // Vorbereitungs- und Kochzeit
           if (jsonData.prepTime) {
             const prepMinutes = convertISODurationToMinutes(jsonData.prepTime);
             if (prepMinutes) recipeData.prep_time_minutes = prepMinutes;
           }
-          
+
           if (jsonData.cookTime) {
             const cookMinutes = convertISODurationToMinutes(jsonData.cookTime);
             if (cookMinutes) recipeData.cook_time_minutes = cookMinutes;
           }
-          
+
           // Bild
           if (jsonData.image) {
-            if (typeof jsonData.image === 'string') {
+            if (typeof jsonData.image === "string") {
               recipeData.image_path = jsonData.image;
             }
           }
-          
+
           // Zutaten
-          if (jsonData.recipeIngredient && Array.isArray(jsonData.recipeIngredient)) {
+          if (
+            jsonData.recipeIngredient &&
+            Array.isArray(jsonData.recipeIngredient)
+          ) {
             recipeData.ingredients = jsonData.recipeIngredient
-              .map(ingredient => ingredient.trim())
-              .filter(ingredient => {
+              .map((ingredient) => ingredient.trim())
+              .filter((ingredient) => {
                 // Filterkriterien für Cookidoo-spezifische ungültige Zutaten
-                return ingredient && 
-                       !ingredient.includes('cookidoo') &&
-                       !ingredient.includes('Cookidoo') &&
-                       !ingredient.includes('Thermomix') &&
-                       !ingredient.includes('Profil');
+                return (
+                  ingredient &&
+                  !ingredient.includes("cookidoo") &&
+                  !ingredient.includes("Cookidoo") &&
+                  !ingredient.includes("Thermomix") &&
+                  !ingredient.includes("Profil")
+                );
               })
               .map((ingredient, index) => {
                 const parsedIngredient = parseIngredient(ingredient);
@@ -647,36 +701,43 @@ function parseCookidooRecipe(html, url) {
                   name: parsedIngredient.name,
                   quantity: parsedIngredient.quantity,
                   unit: parsedIngredient.unit,
-                  display_order: index
+                  display_order: index,
                 };
               });
           }
-          
+
           // Für Cookidoo müssen wir Anleitungen manuell aus dem HTML extrahieren,
           // da diese nicht im JSON-LD enthalten sind
         }
       } catch (jsonError) {
-        console.error("Fehler beim Parsen der JSON-LD-Daten von Cookidoo:", jsonError);
+        console.error(
+          "Fehler beim Parsen der JSON-LD-Daten von Cookidoo:",
+          jsonError
+        );
       }
     }
-    
+
     // Anleitungen aus der HTML-Struktur extrahieren
     let instructions = "";
-    
+
     // Cookidoo-spezifische Textteile extrahieren oder Platzhalter verwenden
-    instructions = "Dieses Rezept stammt von Cookidoo, der Thermomix-Rezeptplattform. Für die vollständigen Zubereitungsschritte siehe die Originalseite: " + url;
-    
+    instructions =
+      "Dieses Rezept stammt von Cookidoo, der Thermomix-Rezeptplattform. Für die vollständigen Zubereitungsschritte siehe die Originalseite: " +
+      url;
+
     // Einmalig speichern
-    recipeData.instructions = [{
-      step_number: 1,
-      description: instructions
-    }];
-    
+    recipeData.instructions = [
+      {
+        step_number: 1,
+        description: instructions,
+      },
+    ];
+
     // Nur gültige Daten zurückgeben, wenn ein Titel gefunden wurde
     if (recipeData.title && recipeData.title.length > 0) {
       return recipeData;
     }
-    
+
     return null;
   } catch (error) {
     console.error("Fehler beim Parsen des Cookidoo-Rezepts:", error);
