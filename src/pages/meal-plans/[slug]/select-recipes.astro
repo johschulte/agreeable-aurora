@@ -1,0 +1,517 @@
+---
+// Rezeptauswahl-Seite - Zum Auswählen von Rezepten für den Speiseplan per Swipe (FR011)
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getMealPlanWithItems, getUserRecipes } from "../../../utils/db-recipe.js";
+
+// Diese Seite wird nicht vorgerendert, sondern für jede Anfrage serverseitig gerendert
+export const prerender = false;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+// Parameter aus der URL extrahieren
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect("/meal-plans");
+}
+
+// Daten aus der Datenbank laden
+let mealPlan = null;
+let recipes = [];
+let errorMessage = null;
+
+try {
+  // Speiseplan mit seinen Einträgen laden
+  mealPlan = await getMealPlanWithItems(slug, userId);
+  
+  if (!mealPlan) {
+    return Astro.redirect("/meal-plans");
+  }
+  
+  // Rezepte des Benutzers laden, sortiert nach Erstellungsdatum (neueste zuerst)
+  recipes = await getUserRecipes(userId, {
+    sortBy: "created_at",
+    sortOrder: "desc",
+  });
+  
+  // Bereits ausgewählte Rezepte aus der Liste entfernen
+  const selectedRecipeIds = mealPlan.items?.map(item => item.recipe_id) || [];
+  if (selectedRecipeIds.length > 0) {
+    recipes = recipes.filter(recipe => !selectedRecipeIds.includes(recipe.id));
+  }
+  
+} catch (error) {
+  console.error("Fehler beim Laden der Daten:", error);
+  errorMessage = "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
+}
+
+// Formatiere Datum für die Anzeige
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Berechne die Anzahl der Tage zwischen Start- und Enddatum
+function calculateDayCount(startDate, endDate) {
+  if (!startDate || !endDate) return 0;
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  const diffTime = Math.abs(end - start);
+  return Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1; // +1 weil der Anfangstag mitgezählt wird
+}
+
+// Anzahl der zu planenden Tage
+const dayCount = mealPlan ? calculateDayCount(mealPlan.start_date, mealPlan.end_date) : 0;
+
+// Übersetze Mahlzeitentypen ins Deutsche für die Anzeige
+const mealTypeLabels = {
+  breakfast: "Frühstück",
+  lunch: "Mittagessen",
+  dinner: "Abendessen",
+  snack: "Snack"
+};
+
+// Berechne, wie viele Rezepte insgesamt benötigt werden
+// (Tage × Anzahl der Mahlzeitentypen)
+const selectedMealTypes = mealPlan?.meal_types || [];
+const totalNeededRecipes = dayCount * selectedMealTypes.length;
+---
+
+<RecipeLayout title="Rezepte auswählen">
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Rezepte für deinen Speiseplan auswählen
+      </h1>
+      <div class="flex items-center space-x-4">
+        <a 
+          href={`/meal-plans/${slug}/generate`} 
+          id="generatePlanLink"
+          class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center opacity-50 cursor-not-allowed"
+          aria-disabled="true"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+            <path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 01-9.201 2.466l-.312-.311h2.433a.75.75 0 000-1.5H3.989a.75.75 0 00-.75.75v4.242a.75.75 0 001.5 0v-2.43l.31.31a7 7 0 0011.712-3.138.75.75 0 00-1.449-.39zm1.23-3.723a.75.75 0 00.219-.53V2.929a.75.75 0 00-1.5 0V5.36l-.31-.31A7 7 0 003.239 8.188a.75.75 0 101.448.389A5.5 5.5 0 0113.89 6.11l.311.31h-2.432a.75.75 0 000 1.5h4.243a.75.75 0 00.53-.219z" clip-rule="evenodd" />
+          </svg>
+          Speiseplan generieren
+        </a>
+        <a
+          href="/meal-plans"
+          class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+        >
+          Zurück zur Übersicht
+        </a>
+      </div>
+    </div>
+
+    {errorMessage && (
+      <div class="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-6">
+        {errorMessage}
+      </div>
+    )}
+
+    {mealPlan && (
+      <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-8">
+        <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
+          <div>
+            <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100">
+              {mealPlan.name}
+            </h2>
+            <p class="text-gray-600 dark:text-gray-400 mt-1">
+              {formatDate(mealPlan.start_date)} - {formatDate(mealPlan.end_date)}
+            </p>
+          </div>
+          <div class="bg-gray-100 dark:bg-gray-700 p-3 rounded-md">
+            <div class="flex items-center text-gray-700 dark:text-gray-300">
+              <span class="text-sm mr-2">Ausgewählte Rezepte:</span>
+              <span id="selectedCount" class="font-semibold">0</span>
+              <span class="mx-1">/</span>
+              <span class="text-sm" id="minimumCount">{totalNeededRecipes}</span>
+              <span class="text-sm ml-1">benötigt</span>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              {dayCount} Tage mit {selectedMealTypes.length} Mahlzeiten pro Tag:
+              {selectedMealTypes.map((type) => (
+                <span class="inline-block mx-1">{mealTypeLabels[type] || type}</span>
+              ))}
+            </p>
+          </div>
+        </div>
+      </div>
+    )}
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8 mb-10">
+      <div class="md:col-span-1 order-2 md:order-1">
+        <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 sticky top-4">
+          <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4">
+            Ausgewählte Rezepte
+          </h3>
+          
+          <div id="selectedRecipes" class="space-y-3 max-h-[500px] overflow-y-auto pb-2">
+            <p class="text-gray-500 dark:text-gray-400 text-center py-8" id="noSelectedMessage">
+              Noch keine Rezepte ausgewählt.<br>
+              Swipe nach rechts, um Rezepte zum Speiseplan hinzuzufügen.
+            </p>
+          </div>
+          
+          <div class="mt-6">
+            <button
+              id="finishSelectionBtn"
+              class="w-full px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md font-medium transition-colors opacity-50 cursor-not-allowed"
+              disabled
+            >
+              Rezeptauswahl abschließen
+            </button>
+          </div>
+        </div>
+      </div>
+      
+      <div class="md:col-span-2 order-1 md:order-2">
+        <div id="recipeSwipeContainer" class="relative h-[500px] bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+          {recipes.length > 0 ? (
+            <div id="swipeCards" class="relative h-full w-full">
+              {recipes.map((recipe, index) => (
+                <div 
+                  class={`recipe-card absolute inset-0 p-6 transform transition-all duration-300 ${index === 0 ? 'z-10' : 'z-0 opacity-0'}`}
+                  data-recipe-id={recipe.id}
+                  data-recipe-title={recipe.title}
+                  data-recipe-image={recipe.image_path || "/images/recipe-placeholder.jpg"}
+                >
+                  <div class="flex flex-col h-full">
+                    <h3 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-3">
+                      {recipe.title}
+                    </h3>
+                    
+                    <div class="relative flex-grow mb-4 overflow-hidden rounded-lg">
+                      <img 
+                        src={recipe.image_path || "/images/recipe-placeholder.jpg"} 
+                        alt={recipe.title}
+                        class="w-full h-full object-cover"
+                        onerror="this.onerror=null; this.src='/images/recipe-placeholder.jpg';"
+                      />
+                      <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/50 to-transparent p-3">
+                        <div class="flex flex-wrap gap-2">
+                          {recipe.recipe_tags && recipe.recipe_tags.map(tagRelation => tagRelation.tags && (
+                            <span class="text-xs bg-gray-800/80 text-white px-2 py-1 rounded">
+                              {tagRelation.tags.name}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                      <div class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2">
+                          <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5.25L6.3 12.6a.75.75 0 101.05 1.07l3.3-3.23a.75.75 0 00.22-.53V5z" clip-rule="evenodd" />
+                        </svg>
+                        <span class="text-gray-700 dark:text-gray-300">
+                          {recipe.prep_time_minutes + recipe.cook_time_minutes} Min.
+                        </span>
+                      </div>
+                      <div class="flex items-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 text-gray-500 dark:text-gray-400 mr-2">
+                          <path d="M7 8a3 3 0 100-6 3 3 0 000 6zM14.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 017 18a9.953 9.953 0 01-5.385-1.572zM14.5 16.5h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 00-1.588-3.755 4.502 4.502 0 015.874 2.636.818.818 0 01-.36.98A7.465 7.465 0 0114.5 16.5z" />
+                        </svg>
+                        <span class="text-gray-700 dark:text-gray-300">
+                          {recipe.servings} Portionen
+                        </span>
+                      </div>
+                    </div>
+                    
+                    <div class="flex justify-between mt-auto">
+                      <button 
+                        class="bg-red-100 hover:bg-red-200 text-red-800 px-6 py-2 rounded-md transition-colors swipe-no"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                          <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+                        </svg>
+                      </button>
+                      <button 
+                        class="bg-emerald-100 hover:bg-emerald-200 text-emerald-800 px-6 py-2 rounded-md transition-colors swipe-yes"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+                          <path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              
+              <div id="emptyState" class="hidden absolute inset-0 p-6 z-20 flex flex-col items-center justify-center">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-16 h-16 text-gray-300 dark:text-gray-600 mb-4">
+                  <path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm13.36-1.814a.75.75 0 10-1.22-.872l-3.236 4.53L9.53 12.22a.75.75 0 00-1.06 1.06l2.25 2.25a.75.75 0 001.14-.094l3.75-5.25z" clip-rule="evenodd" />
+                </svg>
+                <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  Alle Rezepte gesichtet!
+                </h3>
+                <p class="text-gray-500 dark:text-gray-400 text-center mb-4">
+                  Du hast alle verfügbaren Rezepte durchgesehen.
+                </p>
+                <a href={`/meal-plans/${slug}/generate`} class="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md transition-colors">
+                  Weiter zur Speiseplanerstellung
+                </a>
+              </div>
+            </div>
+          ) : (
+            <div class="flex flex-col items-center justify-center h-full p-6">
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-16 h-16 text-gray-300 dark:text-gray-600 mb-4">
+                <path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25zm-2.625 6c-.54 0-.828.419-.936.634a1.96 1.96 0 00-.189.866c0 .298.059.605.189.866.108.215.395.634.936.634.54 0 .828-.419.936-.634.13-.26.189-.568.189-.866 0-.298-.059-.605-.189-.866-.108-.215-.395-.634-.936-.634zm4.314.634c.108-.215.395-.634.936-.634.54 0 .828.419.936.634.13.26.189.568.189.866 0 .298-.059.605-.189.866-.108.215-.395.634-.936.634-.54 0-.828-.419-.936-.634a1.96 1.96 0 01-.189-.866c0-.298.059-.605.189-.866zm2.023 6.828a.75.75 0 10-1.06-1.06 3.75 3.75 0 01-5.304 0 .75.75 0 00-1.06 1.06 5.25 5.25 0 007.424 0z" clip-rule="evenodd" />
+              </svg>
+              <h3 class="text-xl font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                Keine weiteren Rezepte verfügbar
+              </h3>
+              <p class="text-gray-500 dark:text-gray-400 text-center">
+                Erstelle neue Rezepte oder erstelle deinen Speiseplan mit den bereits ausgewählten Rezepten.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  </div>
+</RecipeLayout>
+
+<script>
+  // Implementierung der Swipe-Funktionalität
+  document.addEventListener('DOMContentLoaded', () => {
+    const mealPlanId = window.location.pathname.split('/')[2];
+    const recipeCards = document.querySelectorAll('.recipe-card');
+    const selectedRecipesContainer = document.getElementById('selectedRecipes');
+    const noSelectedMessage = document.getElementById('noSelectedMessage');
+    const selectedCountElement = document.getElementById('selectedCount');
+    const emptyState = document.getElementById('emptyState');
+    const generatePlanLink = document.getElementById('generatePlanLink');
+    const finishSelectionBtn = document.getElementById('finishSelectionBtn');
+    
+    // Array für ausgewählte Rezepte
+    const selectedRecipes = [];
+    
+    // Die minimale Anzahl an benötigten Rezepten
+    const minimumRecipesNeeded = parseInt(document.getElementById('minimumCount').textContent);
+    
+    // Aktualisiere den Zähler und UI-Zustand
+    function updateSelectionCounter() {
+      // Aktualisiere den Zähler
+      selectedCountElement.textContent = selectedRecipes.length;
+      
+      // Zeige/verstecke die "Keine Rezepte ausgewählt" Nachricht
+      if (selectedRecipes.length > 0) {
+        noSelectedMessage.classList.add('hidden');
+      } else {
+        noSelectedMessage.classList.remove('hidden');
+      }
+      
+      // Aktiviere/deaktiviere den "Weiter"-Button basierend auf der Anzahl ausgewählter Rezepte
+      if (selectedRecipes.length >= minimumRecipesNeeded) {
+        generatePlanLink.classList.remove('opacity-50', 'cursor-not-allowed');
+        generatePlanLink.setAttribute('aria-disabled', 'false');
+        finishSelectionBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+        finishSelectionBtn.disabled = false;
+      } else {
+        generatePlanLink.classList.add('opacity-50', 'cursor-not-allowed');
+        generatePlanLink.setAttribute('aria-disabled', 'true');
+        finishSelectionBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        finishSelectionBtn.disabled = true;
+      }
+    }
+    
+    // Funktion zum Hinzufügen eines Rezepts zur ausgewählten Liste
+    function addToSelectedRecipes(recipeId, recipeTitle, recipeImage) {
+      // Prüfe, ob das Rezept bereits ausgewählt ist
+      if (selectedRecipes.find(r => r.id === recipeId)) {
+        return; // Rezept bereits in der Liste
+      }
+      
+      // Füge das Rezept zum Array hinzu
+      selectedRecipes.push({
+        id: recipeId,
+        title: recipeTitle,
+        image: recipeImage
+      });
+      
+      // Erstelle ein neues Element für die ausgewählte Liste
+      const selectedItem = document.createElement('div');
+      selectedItem.className = 'flex items-center gap-3 p-2 bg-gray-50 dark:bg-gray-700 rounded-md';
+      selectedItem.dataset.recipeId = recipeId;
+      
+      selectedItem.innerHTML = `
+        <img src="${recipeImage}" alt="${recipeTitle}" class="w-12 h-12 object-cover rounded-md">
+        <div class="flex-grow">
+          <div class="text-sm font-medium text-gray-900 dark:text-gray-100">${recipeTitle}</div>
+        </div>
+        <button class="remove-recipe text-gray-400 hover:text-red-500">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5">
+            <path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z" />
+          </svg>
+        </button>
+      `;
+      
+      // Füge das Element zum Container hinzu
+      selectedRecipesContainer.appendChild(selectedItem);
+      
+      // Füge Event-Listener zum Entfernen hinzu
+      selectedItem.querySelector('.remove-recipe').addEventListener('click', () => {
+        removeFromSelectedRecipes(recipeId);
+      });
+      
+      // Aktualisiere den Zähler
+      updateSelectionCounter();
+    }
+    
+    // Funktion zum Entfernen eines Rezepts aus der ausgewählten Liste
+    function removeFromSelectedRecipes(recipeId) {
+      // Entferne das Rezept aus dem Array
+      const index = selectedRecipes.findIndex(r => r.id === recipeId);
+      if (index !== -1) {
+        selectedRecipes.splice(index, 1);
+      }
+      
+      // Entferne das Element aus dem DOM
+      const selectedItem = selectedRecipesContainer.querySelector(`[data-recipe-id="${recipeId}"]`);
+      if (selectedItem) {
+        selectedItem.remove();
+      }
+      
+      // Aktualisiere den Zähler
+      updateSelectionCounter();
+    }
+    
+    // Initialer Zähler-Update
+    updateSelectionCounter();
+    
+    // Event-Listener und Funktionalität für Swipe-Aktionen
+    let currentCardIndex = 0;
+    
+    // Funktion zum Zeigen der nächsten Karte
+    function showNextCard() {
+      if (currentCardIndex < recipeCards.length - 1) {
+        // Verstecke aktuelle Karte
+        recipeCards[currentCardIndex].classList.add('opacity-0');
+        recipeCards[currentCardIndex].classList.remove('z-10');
+        currentCardIndex++;
+        
+        // Zeige nächste Karte
+        recipeCards[currentCardIndex].classList.add('z-10');
+        setTimeout(() => {
+          recipeCards[currentCardIndex].classList.remove('opacity-0');
+        }, 50);
+      } else {
+        // Keine weiteren Karten mehr, zeige den Endzustand
+        emptyState.classList.remove('hidden');
+      }
+    }
+    
+    // Event-Listener für die Swipe-Buttons
+    recipeCards.forEach(card => {
+      // "Ja"-Button (nach rechts)
+      card.querySelector('.swipe-yes').addEventListener('click', () => {
+        const recipeId = card.dataset.recipeId;
+        const recipeTitle = card.dataset.recipeTitle;
+        const recipeImage = card.dataset.recipeImage;
+        
+        // Füge das Rezept zur ausgewählten Liste hinzu
+        addToSelectedRecipes(recipeId, recipeTitle, recipeImage);
+        
+        // Animiere Karte nach rechts
+        card.style.transform = 'translateX(100%) rotate(10deg)';
+        
+        // Nach der Animation nächste Karte zeigen
+        setTimeout(() => {
+          showNextCard();
+          card.style.transform = '';
+        }, 300);
+      });
+      
+      // "Nein"-Button (nach links)
+      card.querySelector('.swipe-no').addEventListener('click', () => {
+        // Animiere Karte nach links
+        card.style.transform = 'translateX(-100%) rotate(-10deg)';
+        
+        // Nach der Animation nächste Karte zeigen
+        setTimeout(() => {
+          showNextCard();
+          card.style.transform = '';
+        }, 300);
+      });
+    });
+    
+    // Event-Listener für den Abschluss-Button
+    if (finishSelectionBtn) {
+      finishSelectionBtn.addEventListener('click', () => {
+        window.location.href = `/meal-plans/${mealPlanId}/generate`;
+      });
+    }
+    
+    // Touch-Swipe-Funktionalität
+    let touchStartX = 0;
+    let touchEndX = 0;
+    let touchThreshold = 80; // Schwellenwert für die Swipe-Erkennung
+    
+    recipeCards.forEach(card => {
+      card.addEventListener('touchstart', e => {
+        touchStartX = e.changedTouches[0].screenX;
+      });
+      
+      card.addEventListener('touchend', e => {
+        touchEndX = e.changedTouches[0].screenX;
+        handleSwipe(card);
+      });
+    });
+    
+    function handleSwipe(card) {
+      const swipeDistance = touchEndX - touchStartX;
+      
+      if (swipeDistance > touchThreshold) {
+        // Swipe nach rechts (Ja)
+        card.querySelector('.swipe-yes').click();
+      } else if (swipeDistance < -touchThreshold) {
+        // Swipe nach links (Nein)
+        card.querySelector('.swipe-no').click();
+      }
+    }
+    
+    // Maus-Drag-Funktionalität
+    let isDragging = false;
+    let dragStartX = 0;
+    let currentX = 0;
+    
+    recipeCards.forEach(card => {
+      card.addEventListener('mousedown', e => {
+        if (card.classList.contains('z-10')) {
+          isDragging = true;
+          dragStartX = e.clientX;
+          card.style.transition = 'none';
+        }
+      });
+      
+      document.addEventListener('mousemove', e => {
+        if (isDragging && card.classList.contains('z-10')) {
+          currentX = e.clientX - dragStartX;
+          card.style.transform = `translateX(${currentX}px) rotate(${currentX * 0.02}deg)`;
+        }
+      });
+      
+      document.addEventListener('mouseup', () => {
+        if (isDragging && card.classList.contains('z-10')) {
+          isDragging = false;
+          card.style.transition = 'transform 0.3s ease';
+          
+          if (currentX > touchThreshold) {
+            // Swipe nach rechts (Ja)
+            card.querySelector('.swipe-yes').click();
+          } else if (currentX < -touchThreshold) {
+            // Swipe nach links (Nein)
+            card.querySelector('.swipe-no').click();
+          } else {
+            // Zurück zur Mitte
+            card.style.transform = '';
+          }
+        }
+      });
+    });
+  });
+</script>

@@ -1,0 +1,420 @@
+---
+// Speiseplan-Generierungsseite - Zum automatischen Erstellen eines Essensplans (FR012)
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getMealPlanWithItems, getUserRecipes, addRecipeToMealPlan } from "../../../utils/db-recipe.js";
+
+// Diese Seite wird nicht vorgerendert, sondern für jede Anfrage serverseitig gerendert
+export const prerender = false;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+// Parameter aus der URL extrahieren
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect("/meal-plans");
+}
+
+// Daten aus der Datenbank laden
+let mealPlan = null;
+let selectedRecipes = [];
+let generatedPlan = {};
+let errorMessage = null;
+let successMessage = null;
+
+try {
+  // Speiseplan mit seinen Einträgen laden
+  mealPlan = await getMealPlanWithItems(slug, userId);
+  
+  if (!mealPlan) {
+    return Astro.redirect("/meal-plans");
+  }
+  
+  // Alle Rezepte des Benutzers laden
+  const allRecipes = await getUserRecipes(userId);
+  
+  // Ausgewählte Rezepte basierend auf vorhandenen Einträgen im Speiseplan identifizieren
+  const existingRecipeIds = mealPlan.items?.map(item => item.recipe_id) || [];
+  
+  // Generiere einen Plan, wenn noch keiner existiert (oder POST-Request)
+  const isGenerated = mealPlan.items?.length > 0;
+  
+  if (Astro.request.method === "POST") {
+    try {
+      const formData = await Astro.request.formData();
+      
+      // Reset the meal plan if requested
+      if (formData.get("action") === "reset") {
+        // In a real app, you would delete all meal plan items from the database here
+        // For now, we'll just reload the page
+        return Astro.redirect(`/meal-plans/${slug}/generate?reset=true`);
+      }
+      
+      // Speichere die Zuordnungen von Rezepten zu Tagen/Mahlzeiten
+      const entries = Array.from(formData.entries());
+      
+      // Tage für den Speiseplan berechnen
+      const startDate = new Date(mealPlan.start_date);
+      const endDate = new Date(mealPlan.end_date);
+      const dayCount = Math.ceil((endDate - startDate) / (1000 * 60 * 60 * 24)) + 1;
+      
+      // Alle vorhandenen Einträge entfernen (bei echter App)
+      // In der vollständigen Implementierung würden wir hier alle meal_plan_items löschen
+      
+      // Verarbeite alle Formulareinträge im Format "meal_[date]_[type]"
+      for (const [key, value] of entries) {
+        if (key.startsWith("meal_") && value) {
+          const [_, dateStr, mealType] = key.split("_");
+          const mealDate = dateStr;
+          const recipeId = value.toString();
+          
+          // Rezept zum Speiseplan hinzufügen
+          await addRecipeToMealPlan(slug, recipeId, mealDate, mealType);
+        }
+      }
+      
+      successMessage = "Speiseplan erfolgreich gespeichert!";
+      
+      // Lade den aktualisierten Speiseplan
+      mealPlan = await getMealPlanWithItems(slug, userId);
+    } catch (error) {
+      console.error("Fehler beim Speichern des Speiseplans:", error);
+      errorMessage = `Es gab ein Problem beim Speichern des Speiseplans: ${error.message}`;
+    }
+  }
+  
+  // Wenn keine Einträge existieren, generiere einen neuen Plan
+  if (mealPlan.items?.length === 0) {
+    // Rezepte basierend auf Swipe-Auswahl aus URL-Parameter laden
+    // In einer vollständigen App würden wir hier Rezepte mit "yes" Swipes aus der Datenbank laden
+    
+    // Wähle einfach die neuesten Rezepte aus, um das Feature zu demonstrieren
+    selectedRecipes = await getUserRecipes(userId, {
+      sortBy: "created_at",
+      sortOrder: "desc",
+      limit: 20, // Begrenze auf eine angemessene Anzahl
+    });
+    
+    // Priorisiere Rezepte, die noch nicht oder lange nicht mehr verwendet wurden
+    selectedRecipes.sort((a, b) => {
+      // Wenn ein Rezept noch nie verwendet wurde, hat es höhere Priorität
+      if (!a.last_used_at && b.last_used_at) return -1;
+      if (a.last_used_at && !b.last_used_at) return 1;
+      if (!a.last_used_at && !b.last_used_at) return 0;
+      
+      // Sonst sortiere nach letztem Verwendungsdatum (ältere Nutzung = höhere Priorität)
+      return new Date(a.last_used_at) - new Date(b.last_used_at);
+    });
+    
+    // Generiere einen Plan aus den verfügbaren Rezepten
+    generatedPlan = generateMealPlan(mealPlan, selectedRecipes);
+  }
+  
+} catch (error) {
+  console.error("Fehler beim Laden der Daten:", error);
+  errorMessage = "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
+}
+
+// Formatiere Datum für die Anzeige
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Formatiere Datum mit Wochentag
+function formatDateWithDay(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+}
+
+// Berechne die Tage zwischen Start- und Enddatum
+function getDaysBetween(startDate, endDate) {
+  const dates = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Setze auf 00:00 Uhr, um Probleme mit Sommerzeit etc. zu vermeiden
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  
+  // Iteriere durch alle Tage
+  const current = new Date(start);
+  while (current <= end) {
+    dates.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return dates;
+}
+
+// Übersetze Mahlzeitentypen ins Deutsche für die Anzeige
+const mealTypeLabels = {
+  breakfast: "Frühstück",
+  lunch: "Mittagessen",
+  dinner: "Abendessen",
+  snack: "Snack"
+};
+
+// Generiere einen Speiseplan aus den ausgewählten Rezepten
+function generateMealPlan(mealPlan, availableRecipes) {
+  // Tage für den Speiseplan berechnen
+  const dates = getDaysBetween(mealPlan.start_date, mealPlan.end_date);
+  
+  // Mahlzeitentypen aus dem Speiseplan
+  const mealTypes = mealPlan.meal_types || [];
+  
+  // Erstelle einen leeren Plan
+  const plan = {};
+  
+  // Weise Rezepte für jeden Tag und jede Mahlzeit zu
+  let recipeIndex = 0;
+  
+  dates.forEach(date => {
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    plan[dateStr] = {};
+    
+    mealTypes.forEach(type => {
+      // Finde ein passendes Rezept, das noch nicht für diesen Tag verwendet wurde
+      const dateRecipes = Object.values(plan[dateStr]);
+      
+      // Finde ein Rezept, das noch nicht an diesem Tag verwendet wurde
+      let selectedRecipe = null;
+      let attempts = 0;
+      const maxAttempts = availableRecipes.length;
+      
+      while (!selectedRecipe && attempts < maxAttempts) {
+        const recipe = availableRecipes[recipeIndex % availableRecipes.length];
+        
+        // Prüfe, ob das Rezept bereits an diesem Tag verwendet wird
+        if (!dateRecipes.some(r => r?.id === recipe.id)) {
+          selectedRecipe = recipe;
+        }
+        
+        recipeIndex++;
+        attempts++;
+      }
+      
+      // Falls kein uniques Rezept gefunden wurde, verwende einfach das nächste (könnte Duplikate geben)
+      if (!selectedRecipe && availableRecipes.length > 0) {
+        selectedRecipe = availableRecipes[recipeIndex % availableRecipes.length];
+        recipeIndex++;
+      }
+      
+      plan[dateStr][type] = selectedRecipe;
+    });
+  });
+  
+  return plan;
+}
+
+// Bestimme, ob der Plan bereits Einträge hat
+const hasMealPlanItems = mealPlan?.items && mealPlan.items.length > 0;
+
+// Organisiere die Mahlzeitenplan-Einträge nach Datum und Typ
+const organizedItems = {};
+
+if (hasMealPlanItems) {
+  mealPlan.items.forEach(item => {
+    const dateStr = new Date(item.meal_date).toISOString().split('T')[0];
+    
+    if (!organizedItems[dateStr]) {
+      organizedItems[dateStr] = {};
+    }
+    
+    organizedItems[dateStr][item.meal_type] = {
+      ...item.recipes,
+      mealPlanItemId: item.id,
+    };
+  });
+}
+
+// Tage für den Speiseplan
+const planDates = getDaysBetween(mealPlan.start_date, mealPlan.end_date);
+---
+
+<RecipeLayout title="Speiseplan generieren">
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Speiseplan: {mealPlan?.name}
+      </h1>
+      <div class="flex items-center space-x-4">
+        <a
+          href={`/meal-plans/${slug}/shopping-list`}
+          class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+            <path d="M1 1.75A.75.75 0 011.75 1h1.628a1.75 1.75 0 011.734 1.51L5.18 3a65.25 65.25 0 0113.36 1.412.75.75 0 01.58.875 48.645 48.645 0 01-1.618 6.2.75.75 0 01-.712.513H6a2.503 2.503 0 00-2.292 1.5H17.25a.75.75 0 010 1.5H2.76a.75.75 0 01-.748-.807 4.002 4.002 0 012.716-3.486L3.626 2.716a.25.25 0 00-.248-.216H1.75A.75.75 0 011 1.75zM6 17.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+          </svg>
+          Einkaufsliste erstellen
+        </a>
+        <a
+          href="/meal-plans"
+          class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+        >
+          Zurück zur Übersicht
+        </a>
+      </div>
+    </div>
+
+    {successMessage && (
+      <div class="bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-lg p-4 mb-6">
+        {successMessage}
+      </div>
+    )}
+
+    {errorMessage && (
+      <div class="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-6">
+        {errorMessage}
+      </div>
+    )}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-4">
+        <div>
+          <p class="text-gray-600 dark:text-gray-400">
+            Zeitraum: {formatDate(mealPlan?.start_date)} - {formatDate(mealPlan?.end_date)}
+          </p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            Enthaltene Mahlzeiten: 
+            {mealPlan?.meal_types?.map((type) => (
+              <span class="inline-block mr-2">{mealTypeLabels[type] || type}</span>
+            ))}
+          </p>
+        </div>
+        
+        <form method="POST" class="flex">
+          <input type="hidden" name="action" value="reset" />
+          <button 
+            type="submit" 
+            class="px-3 py-1 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-sm"
+          >
+            Speiseplan zurücksetzen
+          </button>
+        </form>
+      </div>
+    </div>
+    
+    <form method="POST">
+      <div class="space-y-8 mb-8">
+        {planDates.map((date) => {
+          const dateStr = date.toISOString().split('T')[0];
+          return (
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+              <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-emerald-100 dark:border-emerald-800">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {formatDateWithDay(date)}
+                </h2>
+              </div>
+              
+              <div class="p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {mealPlan?.meal_types?.map((mealType) => {
+                    // Hole das bereits zugewiesene Rezept (falls vorhanden)
+                    const assignedRecipe = organizedItems[dateStr]?.[mealType] || 
+                                          generatedPlan[dateStr]?.[mealType] || null;
+                    
+                    return (
+                      <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <div class="flex justify-between items-center mb-3">
+                          <h3 class="font-medium text-gray-800 dark:text-gray-200">
+                            {mealTypeLabels[mealType] || mealType}
+                          </h3>
+                          <select 
+                            name={`meal_${dateStr}_${mealType}`} 
+                            class="text-sm border-gray-300 dark:border-gray-600 rounded-md focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                          >
+                            <option value="">-- Rezept auswählen --</option>
+                            {selectedRecipes.map((recipe) => (
+                              <option 
+                                value={recipe.id} 
+                                selected={assignedRecipe?.id === recipe.id}
+                              >
+                                {recipe.title}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        
+                        {assignedRecipe && (
+                          <div class="bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600 overflow-hidden">
+                            <div class="aspect-video overflow-hidden">
+                              <img 
+                                src={assignedRecipe.image_path || "/images/recipe-placeholder.jpg"} 
+                                alt={assignedRecipe.title}
+                                class="w-full h-full object-cover"
+                                onerror="this.onerror=null; this.src='/images/recipe-placeholder.jpg';"
+                              />
+                            </div>
+                            <div class="p-3">
+                              <h4 class="font-medium text-gray-900 dark:text-gray-100 mb-1">
+                                {assignedRecipe.title}
+                              </h4>
+                              <div class="flex justify-between text-sm">
+                                <span class="text-gray-600 dark:text-gray-400">
+                                  {assignedRecipe.prep_time_minutes + assignedRecipe.cook_time_minutes} Min.
+                                </span>
+                                <span class="text-gray-600 dark:text-gray-400">
+                                  {assignedRecipe.servings} Portionen
+                                </span>
+                              </div>
+                              <a 
+                                href={`/recipes/${assignedRecipe.id}`} 
+                                class="block text-center text-emerald-600 dark:text-emerald-500 mt-2 text-sm hover:underline"
+                                target="_blank"
+                              >
+                                Rezept ansehen
+                              </a>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      
+      <div class="flex justify-end">
+        <button 
+          type="submit" 
+          class="px-6 py-3 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors font-medium"
+        >
+          Speiseplan speichern
+        </button>
+      </div>
+    </form>
+  </div>
+</RecipeLayout>
+
+<script>
+  // Client-seitige Funktionalität
+  document.addEventListener('DOMContentLoaded', () => {
+    // Rezeptauswahl aktualisieren
+    const selects = document.querySelectorAll('select[name^="meal_"]');
+    
+    selects.forEach(select => {
+      select.addEventListener('change', (e) => {
+        const container = e.target.closest('div.bg-gray-50');
+        const recipeContainer = container.querySelector('.bg-white');
+        
+        if (e.target.value === '') {
+          // Wenn kein Rezept ausgewählt wurde, verstecke das Rezept-Container
+          if (recipeContainer) {
+            recipeContainer.style.display = 'none';
+          }
+        } else {
+          // Hier könnten wir mit AJAX das ausgewählte Rezept laden
+          // In einer vollständigen Implementierung
+          // Für dieses MVP aktualisieren wir einfach die Seite bei Speichern
+        }
+      });
+    });
+  });
+</script>

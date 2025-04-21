@@ -1,0 +1,115 @@
+---
+// Speiseplan-Übersichtsseite - Für die Anzeige aller Speisepläne des Nutzers (FR013)
+import RecipeLayout from "../../layouts/RecipeLayout.astro";
+import { getUserMealPlans } from "../../utils/db-recipe.js";
+
+// Diese Seite wird nicht vorgerendert, sondern für jede Anfrage serverseitig gerendert
+export const prerender = false;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+let mealPlans = [];
+let errorMessage = null;
+
+try {
+  // Alle Speisepläne des Benutzers laden
+  mealPlans = await getUserMealPlans(userId);
+} catch (error) {
+  console.error("Fehler beim Laden der Speisepläne:", error);
+  errorMessage = "Es gab ein Problem beim Laden der Daten. Bitte versuche es später erneut.";
+}
+
+// Formatiere Datum für die Anzeige
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+---
+
+<RecipeLayout title="Speisepläne">
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Meine Speisepläne
+      </h1>
+      <a
+        href="/meal-plans/new"
+        class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+          class="w-5 h-5 mr-2"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-11.25a.75.75 0 00-1.5 0v2.5h-2.5a.75.75 0 000 1.5h2.5v2.5a.75.75 0 001.5 0v-2.5h2.5a.75.75 0 000-1.5h-2.5v-2.5z"
+            clip-rule="evenodd"
+          />
+        </svg>
+        Neuen Speiseplan erstellen
+      </a>
+    </div>
+
+    {errorMessage && (
+      <div class="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-6">
+        {errorMessage}
+      </div>
+    )}
+
+    {mealPlans.length > 0 ? (
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        {mealPlans.map((mealPlan) => (
+          <div class="bg-white dark:bg-gray-700 rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+            <div class="p-5">
+              <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">
+                {mealPlan.name}
+              </h2>
+              <div class="flex items-center text-sm text-gray-600 dark:text-gray-400 mb-3">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-1">
+                  <path fill-rule="evenodd" d="M5.75 2a.75.75 0 01.75.75V4h7V2.75a.75.75 0 011.5 0V4h.25A2.75 2.75 0 0118 6.75v8.5A2.75 2.75 0 0115.25 18H4.75A2.75 2.75 0 012 15.25v-8.5A2.75 2.75 0 014.75 4H5V2.75A.75.75 0 015.75 2zm-1 5.5c-.69 0-1.25.56-1.25 1.25v6.5c0 .69.56 1.25 1.25 1.25h10.5c.69 0 1.25-.56 1.25-1.25v-6.5c0-.69-.56-1.25-1.25-1.25H4.75z" clip-rule="evenodd" />
+                </svg>
+                {formatDate(mealPlan.start_date)} - {formatDate(mealPlan.end_date)}
+              </div>
+              <div class="flex space-x-2 mt-4">
+                <a
+                  href={`/meal-plans/${mealPlan.id}`}
+                  class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-600 text-center text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors text-sm"
+                >
+                  Anzeigen
+                </a>
+                <a
+                  href={`/meal-plans/${mealPlan.id}/edit`}
+                  class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-600 text-center text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors text-sm"
+                >
+                  Bearbeiten
+                </a>
+                <a
+                  href={`/meal-plans/${mealPlan.id}/shopping-list`}
+                  class="flex-1 px-3 py-2 bg-gray-100 dark:bg-gray-600 text-center text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-200 dark:hover:bg-gray-500 transition-colors text-sm"
+                >
+                  Einkaufsliste
+                </a>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    ) : (
+      <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-6 text-center">
+        <p class="text-gray-600 dark:text-gray-300 mb-4">
+          Du hast noch keine Speisepläne erstellt.
+        </p>
+        <a
+          href="/meal-plans/new"
+          class="inline-block px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+        >
+          Erstelle deinen ersten Speiseplan
+        </a>
+      </div>
+    )}
+  </div>
+</RecipeLayout>

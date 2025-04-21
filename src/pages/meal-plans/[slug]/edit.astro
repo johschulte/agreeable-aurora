@@ -1,0 +1,323 @@
+---
+// Speiseplan-Bearbeitungsseite - Zum manuellen Anpassen eines Essensplans (FR014, FR015)
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getMealPlanWithItems, getUserRecipes, addRecipeToMealPlan, removeRecipeFromMealPlan } from "../../../utils/db-recipe.js";
+
+// Diese Seite wird nicht vorgerendert, sondern für jede Anfrage serverseitig gerendert
+export const prerender = false;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+// Parameter aus der URL extrahieren
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect("/meal-plans");
+}
+
+// Daten aus der Datenbank laden
+let mealPlan = null;
+let allRecipes = [];
+let errorMessage = null;
+let successMessage = null;
+
+try {
+  // Speiseplan mit seinen Einträgen laden
+  mealPlan = await getMealPlanWithItems(slug, userId);
+  
+  if (!mealPlan) {
+    return Astro.redirect("/meal-plans");
+  }
+  
+  // Alle Rezepte des Benutzers laden
+  allRecipes = await getUserRecipes(userId, {
+    sortBy: "title",
+    sortOrder: "asc",
+  });
+  
+  // Formulardaten verarbeiten
+  if (Astro.request.method === "POST") {
+    const formData = await Astro.request.formData();
+    const action = formData.get("action")?.toString();
+    
+    if (action === "update_meal_plan") {
+      // Alle bestehenden Einträge entfernen
+      const existingItems = mealPlan.items || [];
+      for (const item of existingItems) {
+        await removeRecipeFromMealPlan(item.id);
+      }
+      
+      // Neue Einträge aus dem Formular extrahieren und hinzufügen
+      const entries = Array.from(formData.entries());
+      
+      for (const [key, value] of entries) {
+        if (key.startsWith("meal_") && value) {
+          const [_, dateStr, mealType] = key.split("_");
+          const recipeId = value.toString();
+          
+          // Rezept zum Speiseplan hinzufügen
+          if (recipeId) {
+            await addRecipeToMealPlan(slug, recipeId, dateStr, mealType);
+          }
+        }
+      }
+      
+      successMessage = "Speiseplan erfolgreich aktualisiert.";
+      
+      // Lade die aktualisierte Version
+      mealPlan = await getMealPlanWithItems(slug, userId);
+    }
+  }
+  
+} catch (error) {
+  console.error("Fehler beim Laden oder Aktualisieren des Speiseplans:", error);
+  errorMessage = `Es gab ein Problem: ${error.message}`;
+}
+
+// Formatiere Datum für die Anzeige
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Formatiere Datum mit Wochentag
+function formatDateWithDay(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+}
+
+// Berechne die Tage zwischen Start- und Enddatum
+function getDaysBetween(startDate, endDate) {
+  const dates = [];
+  const start = new Date(startDate);
+  const end = new Date(endDate);
+  
+  // Setze auf 00:00 Uhr, um Probleme mit Sommerzeit etc. zu vermeiden
+  start.setHours(0, 0, 0, 0);
+  end.setHours(0, 0, 0, 0);
+  
+  // Iteriere durch alle Tage
+  const current = new Date(start);
+  while (current <= end) {
+    dates.push(new Date(current));
+    current.setDate(current.getDate() + 1);
+  }
+  
+  return dates;
+}
+
+// Übersetze Mahlzeitentypen ins Deutsche für die Anzeige
+const mealTypeLabels = {
+  breakfast: "Frühstück",
+  lunch: "Mittagessen",
+  dinner: "Abendessen",
+  snack: "Snack"
+};
+
+// Organisiere die Mahlzeitenplan-Einträge nach Datum und Typ
+const organizedItems = {};
+
+if (mealPlan?.items && mealPlan.items.length > 0) {
+  mealPlan.items.forEach(item => {
+    const dateStr = new Date(item.meal_date).toISOString().split('T')[0];
+    
+    if (!organizedItems[dateStr]) {
+      organizedItems[dateStr] = {};
+    }
+    
+    organizedItems[dateStr][item.meal_type] = {
+      ...item.recipes,
+      mealPlanItemId: item.id,
+    };
+  });
+}
+
+// Tage für den Speiseplan
+const planDates = getDaysBetween(mealPlan?.start_date, mealPlan?.end_date);
+---
+
+<RecipeLayout title="Speiseplan bearbeiten">
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        Speiseplan bearbeiten: {mealPlan?.name}
+      </h1>
+      <div class="flex items-center space-x-4">
+        <a
+          href={`/meal-plans/${slug}`}
+          class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+        >
+          Zurück zum Speiseplan
+        </a>
+      </div>
+    </div>
+
+    {successMessage && (
+      <div class="bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-lg p-4 mb-6">
+        {successMessage}
+      </div>
+    )}
+
+    {errorMessage && (
+      <div class="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-6">
+        {errorMessage}
+      </div>
+    )}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <p class="text-gray-600 dark:text-gray-400">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Zeitraum:</span> 
+            {formatDate(mealPlan?.start_date)} - {formatDate(mealPlan?.end_date)}
+          </p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Enthaltene Mahlzeiten:</span>
+            {mealPlan?.meal_types?.map((type) => (
+              <span class="inline-block ml-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 rounded text-xs">
+                {mealTypeLabels[type] || type}
+              </span>
+            ))}
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    <form method="POST">
+      <input type="hidden" name="action" value="update_meal_plan" />
+      
+      <div class="space-y-8 mb-8">
+        {planDates.map((date) => {
+          const dateStr = date.toISOString().split('T')[0];
+          return (
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+              <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-emerald-100 dark:border-emerald-800">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {formatDateWithDay(date)}
+                </h2>
+              </div>
+              
+              <div class="p-4">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {mealPlan?.meal_types?.map((mealType) => {
+                    // Hole das bereits zugewiesene Rezept (falls vorhanden)
+                    const assignedRecipe = organizedItems[dateStr]?.[mealType] || null;
+                    
+                    return (
+                      <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
+                        <label class="block font-medium text-gray-800 dark:text-gray-200 mb-2">
+                          {mealTypeLabels[mealType] || mealType}
+                        </label>
+                        
+                        <select 
+                          name={`meal_${dateStr}_${mealType}`}
+                          class="w-full border-gray-300 dark:border-gray-600 rounded-md focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                        >
+                          <option value="">-- Rezept auswählen --</option>
+                          {allRecipes.map((recipe) => (
+                            <option 
+                              value={recipe.id}
+                              selected={assignedRecipe?.id === recipe.id}
+                            >
+                              {recipe.title}
+                            </option>
+                          ))}
+                        </select>
+                        
+                        {assignedRecipe && (
+                          <div class="mt-4 bg-white dark:bg-gray-800 rounded border border-gray-200 dark:border-gray-600 overflow-hidden">
+                            <div class="flex">
+                              <div class="w-20 h-20 flex-shrink-0">
+                                <img 
+                                  src={assignedRecipe.image_path || "/images/recipe-placeholder.jpg"} 
+                                  alt={assignedRecipe.title}
+                                  class="w-full h-full object-cover"
+                                  onerror="this.onerror=null; this.src='/images/recipe-placeholder.jpg';"
+                                />
+                              </div>
+                              <div class="p-3 flex-grow">
+                                <h4 class="font-medium text-gray-900 dark:text-gray-100 line-clamp-1">{assignedRecipe.title}</h4>
+                                <div class="flex justify-between text-sm mt-1">
+                                  <span class="text-gray-600 dark:text-gray-400">
+                                    {assignedRecipe.prep_time_minutes + assignedRecipe.cook_time_minutes} Min.
+                                  </span>
+                                  <span class="text-gray-600 dark:text-gray-400">
+                                    {assignedRecipe.servings} Portionen
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+      
+      <div class="flex justify-end space-x-4">
+        <a 
+          href={`/meal-plans/${slug}`}
+          class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+        >
+          Abbrechen
+        </a>
+        <button 
+          type="submit" 
+          class="px-6 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+        >
+          Speiseplan speichern
+        </button>
+      </div>
+    </form>
+  </div>
+</RecipeLayout>
+
+<script>
+  // Client-seitige Funktionalität
+  document.addEventListener('DOMContentLoaded', () => {
+    // Rezeptauswahl-Vorschau aktualisieren
+    const selects = document.querySelectorAll('select[name^="meal_"]');
+    
+    selects.forEach(select => {
+      select.addEventListener('change', (e) => {
+        const container = e.target.closest('div.bg-gray-50');
+        const previewContainer = container.querySelector('.mt-4');
+        
+        if (e.target.value === '') {
+          // Wenn kein Rezept ausgewählt wurde, verstecke die Vorschau
+          if (previewContainer) {
+            previewContainer.style.display = 'none';
+          }
+        } else {
+          // In einer vollständigen App würden wir hier AJAX verwenden,
+          // um die Rezeptdaten zu laden und die Vorschau zu aktualisieren
+          
+          // Für dieses Beispiel zeigen wir einfach eine Rückmeldung
+          if (previewContainer) {
+            previewContainer.style.display = 'none';
+          }
+          
+          // Zeige eine Bestätigung an
+          const messageElement = document.createElement('div');
+          messageElement.className = 'mt-2 text-sm text-emerald-600 dark:text-emerald-500';
+          messageElement.textContent = 'Rezept ausgewählt. Speichere den Plan, um die Änderung zu übernehmen.';
+          
+          container.appendChild(messageElement);
+          
+          // Entferne die Nachricht nach kurzer Zeit
+          setTimeout(() => {
+            messageElement.remove();
+          }, 3000);
+        }
+      });
+    });
+  });
+</script>

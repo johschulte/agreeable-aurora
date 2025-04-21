@@ -1,0 +1,381 @@
+---
+// Speiseplan-Anzeige - Zum Anzeigen des generierten Essensplans (FR013)
+import RecipeLayout from "../../../layouts/RecipeLayout.astro";
+import { getMealPlanWithItems, removeRecipeFromMealPlan, generateShoppingListFromMealPlan } from "../../../utils/db-recipe.js";
+
+// Diese Seite wird nicht vorgerendert, sondern für jede Anfrage serverseitig gerendert
+export const prerender = false;
+
+// Benutzer-ID für den in der Datenbank vorhandenen Benutzer
+const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
+
+// Parameter aus der URL extrahieren
+const { slug } = Astro.params;
+
+if (!slug) {
+  return Astro.redirect("/meal-plans");
+}
+
+// Daten aus der Datenbank laden
+let mealPlan = null;
+let errorMessage = null;
+let successMessage = null;
+
+try {
+  // Speiseplan mit seinen Einträgen laden
+  mealPlan = await getMealPlanWithItems(slug, userId);
+  
+  if (!mealPlan) {
+    return Astro.redirect("/meal-plans");
+  }
+  
+  // Formular verarbeiten (wenn vorhanden)
+  if (Astro.request.method === "POST") {
+    const formData = await Astro.request.formData();
+    const action = formData.get("action")?.toString();
+    
+    if (action === "remove_item") {
+      const itemId = formData.get("item_id")?.toString();
+      if (itemId) {
+        await removeRecipeFromMealPlan(itemId);
+        successMessage = "Rezept wurde aus dem Speiseplan entfernt.";
+        
+        // Lade die aktualisierte Version
+        mealPlan = await getMealPlanWithItems(slug, userId);
+      }
+    } else if (action === "generate_shopping_list") {
+      // Einkaufsliste generieren
+      const shoppingListName = formData.get("list_name")?.toString() || `Einkaufsliste für ${mealPlan.name}`;
+      
+      const shoppingList = await generateShoppingListFromMealPlan(
+        userId,
+        mealPlan.id,
+        shoppingListName
+      );
+      
+      // Umleitung zur Einkaufsliste
+      if (shoppingList) {
+        return Astro.redirect(`/lists/${shoppingList.id}`);
+      }
+    }
+  }
+  
+} catch (error) {
+  console.error("Fehler beim Laden der Daten:", error);
+  errorMessage = `Es gab ein Problem beim Laden der Daten: ${error.message}`;
+}
+
+// Formatiere Datum für die Anzeige
+function formatDate(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
+
+// Formatiere Datum mit Wochentag
+function formatDateWithDay(dateString) {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  return date.toLocaleDateString('de-DE', { weekday: 'long', day: '2-digit', month: '2-digit' });
+}
+
+// Übersetze Mahlzeitentypen ins Deutsche für die Anzeige
+const mealTypeLabels = {
+  breakfast: "Frühstück",
+  lunch: "Mittagessen",
+  dinner: "Abendessen",
+  snack: "Snack"
+};
+
+// Organisiere die Mahlzeitenplan-Einträge nach Datum und Typ
+const organizedByDate = {};
+
+if (mealPlan?.items && mealPlan.items.length > 0) {
+  mealPlan.items.forEach(item => {
+    const date = new Date(item.meal_date);
+    const dateStr = date.toISOString().split('T')[0]; // YYYY-MM-DD
+    
+    if (!organizedByDate[dateStr]) {
+      organizedByDate[dateStr] = {
+        date: date,
+        formattedDate: formatDateWithDay(date),
+        meals: {}
+      };
+    }
+    
+    // Füge die Mahlzeit zum jeweiligen Datum hinzu
+    if (!organizedByDate[dateStr].meals[item.meal_type]) {
+      organizedByDate[dateStr].meals[item.meal_type] = [];
+    }
+    
+    organizedByDate[dateStr].meals[item.meal_type].push({
+      ...item,
+      recipe: item.recipes
+    });
+  });
+}
+
+// Sortiere die Daten nach Datum
+const sortedDates = Object.keys(organizedByDate).sort();
+---
+
+<RecipeLayout title={mealPlan?.name || "Speiseplan"}>
+  <div class="container mx-auto px-4 py-8">
+    <div class="flex justify-between items-center mb-8">
+      <h1 class="text-2xl font-bold text-gray-900 dark:text-gray-100">
+        {mealPlan?.name}
+      </h1>
+      <div class="flex items-center space-x-4">
+        <a
+          href={`/meal-plans/${slug}/edit`}
+          class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+            <path d="M5.433 13.917l1.262-3.155A4 4 0 017.58 9.42l6.92-6.918a2.121 2.121 0 013 3l-6.92 6.918c-.383.383-.84.685-1.343.886l-3.154 1.262a.5.5 0 01-.65-.65z" />
+            <path d="M3.5 5.75c0-.69.56-1.25 1.25-1.25H10A.75.75 0 0010 3H4.75A2.75 2.75 0 002 5.75v9.5A2.75 2.75 0 004.75 18h9.5A2.75 2.75 0 0017 15.25V10a.75.75 0 00-1.5 0v5.25c0 .69-.56 1.25-1.25 1.25h-9.5c-.69 0-1.25-.56-1.25-1.25v-9.5z" />
+          </svg>
+          Bearbeiten
+        </a>
+        <button
+          id="generateShoppingListBtn"
+          class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors flex items-center"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 mr-2">
+            <path d="M1 1.75A.75.75 0 011.75 1h1.628a1.75 1.75 0 011.734 1.51L5.18 3a65.25 65.25 0 0113.36 1.412.75.75 0 01.58.875 48.645 48.645 0 01-1.618 6.2.75.75 0 01-.712.513H6a2.503 2.503 0 00-2.292 1.5H17.25a.75.75 0 010 1.5H2.76a.75.75 0 01-.748-.807 4.002 4.002 0 012.716-3.486L3.626 2.716a.25.25 0 00-.248-.216H1.75A.75.75 0 011 1.75zM6 17.5a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0zM15.5 19a1.5 1.5 0 100-3 1.5 1.5 0 000 3z" />
+          </svg>
+          Einkaufsliste erstellen
+        </button>
+        <a
+          href="/meal-plans"
+          class="text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100"
+        >
+          Zurück zur Übersicht
+        </a>
+      </div>
+    </div>
+
+    {successMessage && (
+      <div class="bg-green-100 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-800 dark:text-green-200 rounded-lg p-4 mb-6">
+        {successMessage}
+      </div>
+    )}
+
+    {errorMessage && (
+      <div class="bg-red-100 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-800 dark:text-red-200 rounded-lg p-4 mb-6">
+        {errorMessage}
+      </div>
+    )}
+
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm p-6 mb-8">
+      <div class="flex flex-col md:flex-row md:justify-between md:items-center gap-4">
+        <div>
+          <p class="text-gray-600 dark:text-gray-400">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Zeitraum:</span> 
+            {formatDate(mealPlan?.start_date)} - {formatDate(mealPlan?.end_date)}
+          </p>
+          <p class="text-gray-600 dark:text-gray-400 mt-1">
+            <span class="font-medium text-gray-700 dark:text-gray-300">Enthaltene Mahlzeiten:</span>
+            {mealPlan?.meal_types?.map((type) => (
+              <span class="inline-block ml-1 px-2 py-0.5 bg-emerald-100 dark:bg-emerald-900/20 text-emerald-800 dark:text-emerald-200 rounded text-xs">
+                {mealTypeLabels[type] || type}
+              </span>
+            ))}
+          </p>
+        </div>
+      </div>
+    </div>
+    
+    {sortedDates.length > 0 ? (
+      <div class="space-y-8 mb-8">
+        {sortedDates.map(dateStr => {
+          const dateData = organizedByDate[dateStr];
+          return (
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
+              <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-emerald-100 dark:border-emerald-800">
+                <h2 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
+                  {dateData.formattedDate}
+                </h2>
+              </div>
+              
+              <div class="p-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {Object.keys(dateData.meals).map(mealType => {
+                    const meals = dateData.meals[mealType];
+                    return (
+                      <div>
+                        <h3 class="font-semibold text-gray-900 dark:text-gray-100 mb-3 pb-2 border-b border-gray-200 dark:border-gray-700">
+                          {mealTypeLabels[mealType] || mealType}
+                        </h3>
+                        
+                        <div class="space-y-4">
+                          {meals.map(meal => (
+                            <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 relative">
+                              <div class="flex">
+                                <div class="w-20 h-20 rounded-md overflow-hidden flex-shrink-0">
+                                  <img 
+                                    src={meal.recipe.image_path || "/images/recipe-placeholder.jpg"} 
+                                    alt={meal.recipe.title}
+                                    class="w-full h-full object-cover"
+                                    onerror="this.onerror=null; this.src='/images/recipe-placeholder.jpg';"
+                                  />
+                                </div>
+                                <div class="ml-4 flex-grow">
+                                  <h4 class="font-medium text-gray-900 dark:text-gray-100">
+                                    {meal.recipe.title}
+                                  </h4>
+                                  <div class="mt-1 flex flex-wrap gap-4 text-sm text-gray-600 dark:text-gray-400">
+                                    <span class="flex items-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-1">
+                                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm.75-13a.75.75 0 00-1.5 0v5.25L6.3 12.6a.75.75 0 101.05 1.07l3.3-3.23a.75.75 0 00.22-.53V5z" clip-rule="evenodd" />
+                                      </svg>
+                                      {meal.recipe.prep_time_minutes + meal.recipe.cook_time_minutes} Min.
+                                    </span>
+                                    <span class="flex items-center">
+                                      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-1">
+                                        <path d="M7 8a3 3 0 100-6 3 3 0 000 6zM14.5 9a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM1.615 16.428a1.224 1.224 0 01-.569-1.175 6.002 6.002 0 0111.908 0c.058.467-.172.92-.57 1.174A9.953 9.953 0 017 18a9.953 9.953 0 01-5.385-1.572zM14.5 16.5h-.106c.07-.297.088-.611.048-.933a7.47 7.47 0 00-1.588-3.755 4.502 4.502 0 015.874 2.636.818.818 0 01-.36.98A7.465 7.465 0 0114.5 16.5z" />
+                                      </svg>
+                                      {meal.recipe.servings} Portionen
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              <div class="mt-3 flex justify-between">
+                                <a 
+                                  href={`/recipes/${meal.recipe.id}`} 
+                                  class="text-emerald-600 dark:text-emerald-500 hover:underline text-sm"
+                                  target="_blank"
+                                >
+                                  Rezept ansehen
+                                </a>
+                                
+                                <form method="POST" class="remove-recipe-form">
+                                  <input type="hidden" name="action" value="remove_item" />
+                                  <input type="hidden" name="item_id" value={meal.id} />
+                                  <button 
+                                    type="submit"
+                                    class="text-red-600 dark:text-red-500 hover:text-red-800 dark:hover:text-red-400 text-sm flex items-center"
+                                  >
+                                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4 mr-1">
+                                      <path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 006 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 10.23 1.482l.149-.022.841 10.518A2.75 2.75 0 007.596 19h4.807a2.75 2.75 0 002.742-2.53l.841-10.52.149.023a.75.75 0 00.23-1.482A41.03 41.03 0 0014 4.193V3.75A2.75 2.75 0 0011.25 1h-2.5zM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4zM8.58 7.72a.75.75 0 00-1.5.06l.3 7.5a.75.75 0 101.5-.06l-.3-7.5zm4.34.06a.75.75 0 10-1.5-.06l-.3 7.5a.75.75 0 101.5.06l.3-7.5z" clip-rule="evenodd" />
+                                    </svg>
+                                    Entfernen
+                                  </button>
+                                </form>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    ) : (
+      <div class="bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg p-8 text-center">
+        <p class="text-gray-600 dark:text-gray-400 mb-4">
+          Dieser Speiseplan enthält noch keine Rezepte.
+        </p>
+        <div class="flex justify-center space-x-4">
+          <a
+            href={`/meal-plans/${slug}/select-recipes`}
+            class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+          >
+            Rezepte auswählen
+          </a>
+          <a
+            href={`/meal-plans/${slug}/generate`}
+            class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+          >
+            Speiseplan generieren
+          </a>
+        </div>
+      </div>
+    )}
+  </div>
+  
+  <!-- Modal zum Erstellen einer Einkaufsliste -->
+  <div id="shoppingListModal" class="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center hidden">
+    <div class="bg-white dark:bg-gray-800 rounded-lg shadow-lg p-6 max-w-md w-full mx-4">
+      <h2 class="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-4">
+        Einkaufsliste erstellen
+      </h2>
+      
+      <form method="POST" id="shoppingListForm">
+        <input type="hidden" name="action" value="generate_shopping_list" />
+        
+        <div class="mb-4">
+          <label for="list_name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+            Name der Einkaufsliste
+          </label>
+          <input
+            type="text"
+            id="list_name"
+            name="list_name"
+            value={`Einkaufsliste für ${mealPlan?.name || 'Speiseplan'}`}
+            class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          />
+        </div>
+        
+        <div class="flex justify-end space-x-3 mt-6">
+          <button
+            type="button"
+            id="cancelShoppingList"
+            class="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 rounded-md hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+          >
+            Abbrechen
+          </button>
+          <button
+            type="submit"
+            class="px-4 py-2 bg-emerald-600 text-white rounded-md hover:bg-emerald-700 transition-colors"
+          >
+            Einkaufsliste erstellen
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</RecipeLayout>
+
+<script>
+  // Client-seitige Funktionalität
+  document.addEventListener('DOMContentLoaded', () => {
+    // Formular-Bestätigung für das Entfernen von Rezepten
+    const removeForms = document.querySelectorAll('.remove-recipe-form');
+    
+    removeForms.forEach(form => {
+      form.addEventListener('submit', (e) => {
+        if (!confirm('Möchtest du dieses Rezept wirklich aus dem Speiseplan entfernen?')) {
+          e.preventDefault();
+        }
+      });
+    });
+    
+    // Modal zum Erstellen einer Einkaufsliste
+    const modal = document.getElementById('shoppingListModal');
+    const showButton = document.getElementById('generateShoppingListBtn');
+    const cancelButton = document.getElementById('cancelShoppingList');
+    
+    showButton.addEventListener('click', () => {
+      modal.classList.remove('hidden');
+      document.body.style.overflow = 'hidden'; // Verhindere Scrollen im Hintergrund
+    });
+    
+    cancelButton.addEventListener('click', () => {
+      modal.classList.add('hidden');
+      document.body.style.overflow = ''; // Erlaube Scrollen wieder
+    });
+    
+    // Klick außerhalb des Modals schließt es
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        modal.classList.add('hidden');
+        document.body.style.overflow = '';
+      }
+    });
+  });
+</script>
