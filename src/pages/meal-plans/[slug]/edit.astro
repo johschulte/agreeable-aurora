@@ -30,6 +30,9 @@ try {
     return Astro.redirect("/meal-plans");
   }
   
+  // Debug: Prüfen, was in mealPlan.items enthalten ist
+  console.log("Geladene Speiseplanitems:", mealPlan.items);
+  
   // Alle Rezepte des Benutzers laden
   allRecipes = await getUserRecipes(userId, {
     sortBy: "title",
@@ -50,11 +53,14 @@ try {
       
       // Neue Einträge aus dem Formular extrahieren und hinzufügen
       const entries = Array.from(formData.entries());
+      console.log("Formular-Einträge:", entries);
       
       for (const [key, value] of entries) {
         if (key.startsWith("meal_") && value) {
           const [_, dateStr, mealType] = key.split("_");
           const recipeId = value.toString();
+          
+          console.log(`Füge Rezept hinzu: ${recipeId} für ${dateStr}, Mahlzeit: ${mealType}`);
           
           // Rezept zum Speiseplan hinzufügen
           if (recipeId) {
@@ -67,6 +73,7 @@ try {
       
       // Lade die aktualisierte Version
       mealPlan = await getMealPlanWithItems(slug, userId);
+      console.log("Aktualisierte Speiseplanitems nach Speichern:", mealPlan.items);
     }
   }
   
@@ -121,6 +128,9 @@ const mealTypeLabels = {
 const organizedItems = {};
 
 if (mealPlan?.items && mealPlan.items.length > 0) {
+  // Debug: Prüfen, welche Mahlzeitentypen vorhanden sind
+  console.log("Mahlzeitentypen in mealPlan.items:", mealPlan.items.map(item => item.meal_type));
+  
   mealPlan.items.forEach(item => {
     const dateStr = new Date(item.meal_date).toISOString().split('T')[0];
     
@@ -128,12 +138,18 @@ if (mealPlan?.items && mealPlan.items.length > 0) {
       organizedItems[dateStr] = {};
     }
     
-    organizedItems[dateStr][item.meal_type] = {
+    // Konvertiere meal_type in Kleinbuchstaben, um die Konsistenz zu gewährleisten
+    // in der Datenbank ist es "Breakfast", aber in meal_types ist es "breakfast"
+    const mealTypeKey = item.meal_type.toLowerCase();
+    
+    organizedItems[dateStr][mealTypeKey] = {
       ...item.recipes,
       mealPlanItemId: item.id,
     };
   });
 }
+
+console.log("Organisierte Items:", organizedItems);
 
 // Tage für den Speiseplan
 const planDates = getDaysBetween(mealPlan?.start_date, mealPlan?.end_date);
@@ -192,6 +208,7 @@ const planDates = getDaysBetween(mealPlan?.start_date, mealPlan?.end_date);
       <div class="space-y-8 mb-8">
         {planDates.map((date) => {
           const dateStr = date.toISOString().split('T')[0];
+          console.log(`Rendering date: ${dateStr}, available data:`, organizedItems[dateStr]);
           return (
             <div class="bg-white dark:bg-gray-800 rounded-lg shadow-sm overflow-hidden">
               <div class="bg-emerald-50 dark:bg-emerald-900/20 p-4 border-b border-emerald-100 dark:border-emerald-800">
@@ -204,7 +221,12 @@ const planDates = getDaysBetween(mealPlan?.start_date, mealPlan?.end_date);
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {mealPlan?.meal_types?.map((mealType) => {
                     // Hole das bereits zugewiesene Rezept (falls vorhanden)
-                    const assignedRecipe = organizedItems[dateStr]?.[mealType] || null;
+                    // Da wir den meal_type in lowercase konvertiert haben, müssen wir hier
+                    // ebenfalls lowercase verwenden
+                    const mealTypeKey = mealType.toLowerCase();
+                    const assignedRecipe = organizedItems[dateStr]?.[mealTypeKey] || null;
+                    
+                    console.log(`Checking meal type: ${mealTypeKey} for date ${dateStr}, assigned recipe:`, assignedRecipe?.title || "none");
                     
                     return (
                       <div class="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
@@ -213,7 +235,7 @@ const planDates = getDaysBetween(mealPlan?.start_date, mealPlan?.end_date);
                         </label>
                         
                         <select 
-                          name={`meal_${dateStr}_${mealType}`}
+                          name={`meal_${dateStr}_${mealTypeKey}`}
                           class="w-full border-gray-300 dark:border-gray-600 rounded-md focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                         >
                           <option value="">-- Rezept auswählen --</option>
