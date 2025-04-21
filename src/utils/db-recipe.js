@@ -352,6 +352,25 @@ export async function importRecipeFromUrl(url, userId) {
       
       const html = await response.text();
       
+      // Spezialfall: Cookidoo-Rezepte erkennen und speziell verarbeiten
+      if (normalizedUrl.includes('cookidoo.') || html.includes('cookidoo')) {
+        const cookidooData = parseCookidooRecipe(html, normalizedUrl);
+        if (cookidooData) {
+          // Daten aus der speziellen Cookidoo-Verarbeitung übernehmen
+          recipeData = {
+            ...recipeData,
+            ...cookidooData
+          };
+          
+          // Da Cookidoo speziell verarbeitet wurde, hier beenden
+          return {
+            success: true,
+            message: "Cookidoo-Rezept erfolgreich importiert.",
+            data: recipeData
+          };
+        }
+      }
+      
       // Einfaches Parsing basierend auf Strukturelementen und häufigen Metadaten
       // Häufige Strukturen für Rezeptseiten erkennen
       
@@ -505,10 +524,17 @@ export async function importRecipeFromUrl(url, userId) {
             const matches = [...html.matchAll(regex)];
             
             if (matches.length > 0) {
-              recipeData.instructions = matches.map((match, index) => ({
-                step_number: index + 1,
-                description: match[1].replace(/<[^>]*>/g, '').trim()
-              }));
+              // Alle Anweisungen in einen Text zusammenfassen
+              const allInstructions = matches.map((match, index) => {
+                const text = match[1].replace(/<[^>]*>/g, '').trim();
+                return `${index + 1}. ${text}`;
+              }).join("\n\n");
+              
+              // Als ein einziger Schritt speichern
+              recipeData.instructions = [{
+                step_number: 1,
+                description: allInstructions
+              }];
               break;
             }
           }
@@ -560,68 +586,166 @@ export async function importRecipeFromUrl(url, userId) {
   }
 }
 
+// Spezieller Parser für Cookidoo-Rezepte
+function parseCookidooRecipe(html, url) {
+  try {
+    // Rezept-Daten initialisieren
+    const recipeData = {
+      source_url: url,
+      ingredients: [],
+      instructions: []
+    };
+    
+    // JSON-LD Daten aus der Seite extrahieren
+    const jsonLdMatch = html.match(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/i);
+    if (jsonLdMatch) {
+      try {
+        const jsonData = JSON.parse(jsonLdMatch[1]);
+        if (jsonData['@type'] === 'Recipe') {
+          // Grunddaten extrahieren
+          recipeData.title = jsonData.name || "";
+          
+          // Portionen
+          if (jsonData.recipeYield) {
+            const servings = parseServings(jsonData.recipeYield);
+            if (servings) recipeData.servings = servings;
+          }
+          
+          // Vorbereitungs- und Kochzeit
+          if (jsonData.prepTime) {
+            const prepMinutes = convertISODurationToMinutes(jsonData.prepTime);
+            if (prepMinutes) recipeData.prep_time_minutes = prepMinutes;
+          }
+          
+          if (jsonData.cookTime) {
+            const cookMinutes = convertISODurationToMinutes(jsonData.cookTime);
+            if (cookMinutes) recipeData.cook_time_minutes = cookMinutes;
+          }
+          
+          // Bild
+          if (jsonData.image) {
+            if (typeof jsonData.image === 'string') {
+              recipeData.image_path = jsonData.image;
+            }
+          }
+          
+          // Zutaten
+          if (jsonData.recipeIngredient && Array.isArray(jsonData.recipeIngredient)) {
+            recipeData.ingredients = jsonData.recipeIngredient
+              .map(ingredient => ingredient.trim())
+              .filter(ingredient => {
+                // Filterkriterien für Cookidoo-spezifische ungültige Zutaten
+                return ingredient && 
+                       !ingredient.includes('cookidoo') &&
+                       !ingredient.includes('Cookidoo') &&
+                       !ingredient.includes('Thermomix') &&
+                       !ingredient.includes('Profil');
+              })
+              .map((ingredient, index) => {
+                const parsedIngredient = parseIngredient(ingredient);
+                return {
+                  name: parsedIngredient.name,
+                  quantity: parsedIngredient.quantity,
+                  unit: parsedIngredient.unit,
+                  display_order: index
+                };
+              });
+          }
+          
+          // Für Cookidoo müssen wir Anleitungen manuell aus dem HTML extrahieren,
+          // da diese nicht im JSON-LD enthalten sind
+        }
+      } catch (jsonError) {
+        console.error("Fehler beim Parsen der JSON-LD-Daten von Cookidoo:", jsonError);
+      }
+    }
+    
+    // Anleitungen aus der HTML-Struktur extrahieren
+    let instructions = "";
+    
+    // Cookidoo-spezifische Textteile extrahieren oder Platzhalter verwenden
+    instructions = "Dieses Rezept stammt von Cookidoo, der Thermomix-Rezeptplattform. Für die vollständigen Zubereitungsschritte siehe die Originalseite: " + url;
+    
+    // Einmalig speichern
+    recipeData.instructions = [{
+      step_number: 1,
+      description: instructions
+    }];
+    
+    // Nur gültige Daten zurückgeben, wenn ein Titel gefunden wurde
+    if (recipeData.title && recipeData.title.length > 0) {
+      return recipeData;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error("Fehler beim Parsen des Cookidoo-Rezepts:", error);
+    return null;
+  }
+}
+
 // Hilfsfunktion: Parst eine Zutat in ihre Bestandteile
 function parseIngredient(ingredientString) {
   const result = {
     quantity: 0,
     unit: "",
-    name: ingredientString.trim()
+    name: ingredientString.trim(),
   };
-  
+
   // Versuche, Menge und Einheit zu extrahieren
   const regex = /^([\d\/.,]+)\s*([a-zA-ZäöüÄÖÜß]*)\s+(.+)$/;
   const match = ingredientString.trim().match(regex);
-  
+
   if (match) {
     // Menge parsen (kann auch Brüche wie "1/2" enthalten)
-    const quantityStr = match[1].replace(',', '.');
-    if (quantityStr.includes('/')) {
-      const [numerator, denominator] = quantityStr.split('/');
+    const quantityStr = match[1].replace(",", ".");
+    if (quantityStr.includes("/")) {
+      const [numerator, denominator] = quantityStr.split("/");
       result.quantity = parseFloat(numerator) / parseFloat(denominator);
     } else {
       result.quantity = parseFloat(quantityStr);
     }
-    
+
     // Wenn die Menge erfolgreich geparst wurde
     if (!isNaN(result.quantity)) {
       result.unit = match[2];
       result.name = match[3];
     }
   }
-  
+
   return result;
 }
 
 // Hilfsfunktion: Konvertiert ISO-Dauer-Format in Minuten
 function convertISODurationToMinutes(isoDuration) {
   // ISO 8601 Duration-Format: P[n]Y[n]M[n]DT[n]H[n]M[n]S
-  if (!isoDuration || typeof isoDuration !== 'string') return null;
-  
+  if (!isoDuration || typeof isoDuration !== "string") return null;
+
   // Nur PT-Format unterstützt (Stunden, Minuten, Sekunden)
   const regex = /PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/;
   const match = isoDuration.match(regex);
-  
+
   if (!match) return null;
-  
-  const hours = parseInt(match[1] || '0', 10);
-  const minutes = parseInt(match[2] || '0', 10);
-  const seconds = parseInt(match[3] || '0', 10);
-  
+
+  const hours = parseInt(match[1] || "0", 10);
+  const minutes = parseInt(match[2] || "0", 10);
+  const seconds = parseInt(match[3] || "0", 10);
+
   return hours * 60 + minutes + Math.round(seconds / 60);
 }
 
 // Hilfsfunktion: Extrahiert Portionszahl aus Text
 function parseServings(servingsText) {
   if (!servingsText) return null;
-  
+
   // Versuche, eine Zahl zu extrahieren
   const regex = /(\d+)/;
   const match = servingsText.toString().match(regex);
-  
+
   if (match) {
     return parseInt(match[1], 10);
   }
-  
+
   return null;
 }
 
