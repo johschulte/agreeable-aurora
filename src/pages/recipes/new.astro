@@ -259,10 +259,16 @@ if (Astro.request.method === "POST") {
 
     const tags = tagEntries;
 
+    // Bild-URL verarbeiten
+    const imageUrl = formData.get("recipe_image_url");
+    console.log("=== BILD-URL ===");
+    console.log("Bild-URL:", imageUrl);
+
     console.log("Verarbeitete Daten:", {
       ingredients: ingredients.length,
       instructions: instructions.length,
       tags: tags.length,
+      hasImageUrl: imageUrl && imageUrl.trim() !== "",
     });
 
     // Ausgabe der Daten, die an die Datenbank gesendet werden
@@ -280,6 +286,20 @@ if (Astro.request.method === "POST") {
       instructions,
       tags
     );
+
+    // Wenn eine Bild-URL eingegeben wurde, diese verarbeiten und speichern
+    if (imageUrl && imageUrl.trim() !== "") {
+      try {
+        const { saveRecipeImageUrl } = await import("../../utils/db-recipe.js");
+
+        // Speichere die Bild-URL in der Datenbank
+        const imageResult = await saveRecipeImageUrl(recipe.id, imageUrl);
+        console.log("Bild-URL erfolgreich gespeichert:", imageResult);
+      } catch (imageError) {
+        console.error("Fehler beim Speichern der Bild-URL:", imageError);
+        // Wir werfen hier keinen Fehler, damit das Rezept trotzdem gespeichert wird
+      }
+    }
 
     // Erfolgsmeldung setzen
     successMessage = "Rezept erfolgreich erstellt!";
@@ -322,7 +342,7 @@ if (Astro.request.method === "POST") {
 
   <form
     method="POST"
-    enctype="application/x-www-form-urlencoded"
+    enctype="multipart/form-data"
     class="bg-white dark:bg-gray-800 rounded-lg shadow-sm border border-gray-200 dark:border-gray-700 p-6"
   >
     <!-- Basisdaten -->
@@ -579,31 +599,27 @@ if (Astro.request.method === "POST") {
       </h2>
       <div class="mb-4">
         <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">
-          In dieser vereinfachten Version ist der Bild-Upload deaktiviert. In
-          einer vollständigen Implementierung würde hier eine
-          Datei-Upload-Funktion stehen.
+          Gib eine URL zu einem Bild für dein Rezept ein. Unterstützt werden
+          gängige Bildformate wie JPG, PNG und WebP.
         </p>
-        <div
-          class="px-4 py-3 bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-md"
-        >
-          <div class="flex items-center">
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke-width="1.5"
-              stroke="currentColor"
-              class="w-8 h-8 text-gray-400 dark:text-gray-500 mr-3"
-            >
-              <path
-                stroke-linecap="round"
-                stroke-linejoin="round"
-                d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"
-              ></path>
-            </svg>
-            <span class="text-sm text-gray-600 dark:text-gray-300"
-              >Bild-Upload ist in der aktuellen Version nicht verfügbar</span
-            >
+        <div class="mt-1">
+          <div class="flex flex-col space-y-3">
+            <div class="flex-grow">
+              <input
+                type="url"
+                id="recipe_image_url"
+                name="recipe_image_url"
+                placeholder="https://beispiel.de/mein-bild.jpg"
+                class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 focus:border-emerald-500 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+              />
+            </div>
+            <div id="image-preview" class="hidden">
+              <img
+                src="#"
+                alt="Vorschau"
+                class="h-32 w-auto object-cover rounded-md border border-gray-200 dark:border-gray-700"
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -812,6 +828,112 @@ if (Astro.request.method === "POST") {
         .forEach((span, index) => {
           span.textContent = index + 1;
         });
+    }
+
+    // Bildverarbeitung - Gemeinsame Elemente
+    const imageUrlInput = document.getElementById("recipe_image_url");
+    const urlImagePreview = document.getElementById("image-preview");
+    const urlPreviewImage = urlImagePreview.querySelector("img");
+
+    // Bildupload-Funktionalität
+    const imageInput = document.getElementById("recipe-image");
+    if (imageInput) {
+      const removeImageButton = document.getElementById("remove-image");
+      const uploadLabel = imageInput.closest("label");
+
+      // Verarbeitung beim Auswählen einer Datei
+      imageInput.addEventListener("change", function () {
+        if (this.files && this.files[0]) {
+          const file = this.files[0];
+
+          // Überprüfen, ob es sich um ein Bild handelt
+          if (!file.type.startsWith("image/")) {
+            alert(
+              "Bitte wähle eine gültige Bilddatei (JPG, PNG, GIF, etc.) aus."
+            );
+            this.value = ""; // Zurücksetzen
+            return;
+          }
+
+          // Überprüfen der Dateigröße (max 10MB)
+          const maxSize = 10 * 1024 * 1024; // 10MB in Bytes
+          if (file.size > maxSize) {
+            alert(
+              "Die Bilddatei ist zu groß. Die maximale Dateigröße beträgt 10MB."
+            );
+            this.value = ""; // Zurücksetzen
+            return;
+          }
+
+          // Bildvorschau anzeigen
+          const reader = new FileReader();
+          reader.onload = function (e) {
+            urlPreviewImage.src = e.target.result;
+            urlImagePreview.classList.remove("hidden");
+            if (uploadLabel) uploadLabel.classList.add("hidden");
+          };
+          reader.readAsDataURL(file);
+        }
+      });
+
+      // Entfernen des Bildes
+      if (removeImageButton) {
+        removeImageButton.addEventListener("click", function () {
+          imageInput.value = ""; // Datei-Input zurücksetzen
+          urlPreviewImage.src = "#";
+          urlImagePreview.classList.add("hidden");
+          if (uploadLabel) uploadLabel.classList.remove("hidden");
+        });
+      }
+    }
+
+    // Bildvorschau für URL-Eingabe
+    if (imageUrlInput) {
+      // Vorschau aktualisieren, wenn eine URL eingegeben wird
+      imageUrlInput.addEventListener("blur", function () {
+        const url = this.value.trim();
+
+        if (url) {
+          // Wenn eine URL eingegeben wurde, Vorschau anzeigen
+          urlPreviewImage.src = url;
+          urlPreviewImage.onerror = function () {
+            // Bei ungültiger URL/Bild Vorschau ausblenden
+            urlImagePreview.classList.add("hidden");
+            this.onerror = null; // Handler zurücksetzen
+          };
+          urlPreviewImage.onload = function () {
+            // Bei erfolgreichem Laden Vorschau anzeigen
+            urlImagePreview.classList.remove("hidden");
+          };
+        } else {
+          // Wenn keine URL eingegeben wurde, Vorschau ausblenden
+          urlImagePreview.classList.add("hidden");
+        }
+      });
+
+      // Initial die Vorschau setzen (falls bereits ein Bild vorhanden ist)
+      if (imageUrlInput.value.trim() !== "") {
+        urlPreviewImage.src = imageUrlInput.value;
+        urlImagePreview.classList.remove("hidden");
+      }
+    }
+
+    // Hilfs-Funktion für Bildvorschau
+    function showImagePreview(url) {
+      if (!url || !urlPreviewImage) return;
+
+      // Setze das neue Bild
+      const img = new Image();
+      img.onload = function () {
+        urlPreviewImage.src = url;
+        urlImagePreview.classList.remove("hidden");
+      };
+      img.onerror = function () {
+        // Bei Fehler das Platzhalterbild anzeigen
+        urlPreviewImage.src = "/images/recipe-placeholder.jpg";
+        urlImagePreview.classList.remove("hidden");
+      };
+      img.src = url;
     }
   });
 </script>

@@ -3,7 +3,13 @@
 // Implementiert die Anforderungen FR008 (Rezeptbibliothek suchen) und FR009 (Rezeptbibliothek filtern)
 
 // Props, die von der übergeordneten Komponente übergeben werden
-const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, timeFilter = "all" } = Astro.props;
+const {
+  allTags = [],
+  selectedTags = [],
+  searchTerm = "",
+  showAdvanced = false,
+  timeFilter = "all",
+} = Astro.props;
 ---
 
 <div class="mb-8 bg-white dark:bg-gray-800 rounded-lg shadow-sm p-4">
@@ -56,7 +62,10 @@ const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, 
     </div>
 
     <!-- Filter-Optionen -->
-    <div id="advancedFilters" class={`flex flex-wrap gap-4 ${showAdvanced ? "" : "hidden"}`}>
+    <div
+      id="advancedFilters"
+      class={`flex flex-wrap gap-4 ${showAdvanced ? "" : "hidden"}`}
+    >
       <!-- Zeitfilter -->
       <div class="w-full md:w-auto">
         <label
@@ -69,41 +78,53 @@ const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, 
           name="timeFilter"
           class="block w-full py-2 px-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md shadow-sm focus:outline-none focus:ring-emerald-500 dark:focus:ring-emerald-400 focus:border-emerald-500 dark:focus:border-emerald-400"
         >
-          <option value="all" selected={timeFilter === "all"}>Alle Zeiten</option>
-          <option value="15" selected={timeFilter === "15"}>Unter 15 Minuten</option>
-          <option value="30" selected={timeFilter === "30"}>Unter 30 Minuten</option>
-          <option value="45" selected={timeFilter === "45"}>Unter 45 Minuten</option>
-          <option value="60" selected={timeFilter === "60"}>Unter 1 Stunde</option>
-          <option value="120" selected={timeFilter === "120"}>Unter 2 Stunden</option>
+          <option value="all" selected={timeFilter === "all"}
+            >Alle Zeiten</option
+          >
+          <option value="15" selected={timeFilter === "15"}
+            >Unter 15 Minuten</option
+          >
+          <option value="30" selected={timeFilter === "30"}
+            >Unter 30 Minuten</option
+          >
+          <option value="45" selected={timeFilter === "45"}
+            >Unter 45 Minuten</option
+          >
+          <option value="60" selected={timeFilter === "60"}
+            >Unter 1 Stunde</option
+          >
+          <option value="120" selected={timeFilter === "120"}
+            >Unter 2 Stunden</option
+          >
         </select>
       </div>
 
       <!-- Tag-Filter -->
-      {allTags.length > 0 && (
-        <div class="w-full flex-grow">
-          <label
-            class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
-          >
-            Tags
-          </label>
-          <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-gray-300 dark:border-gray-600 rounded-md">
-            {allTags.map((tag) => (
-              <label class="inline-flex items-center px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="tag"
-                  value={tag.id}
-                  checked={selectedTags.includes(tag.id.toString())}
-                  class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded mr-2"
-                />
-                <span class="text-sm text-gray-700 dark:text-gray-300">
-                  {tag.name}
-                </span>
-              </label>
-            ))}
+      {
+        allTags.length > 0 && (
+          <div class="w-full flex-grow">
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+              Tags
+            </label>
+            <div class="flex flex-wrap gap-2 max-h-40 overflow-y-auto p-2 border border-gray-300 dark:border-gray-600 rounded-md">
+              {allTags.map((tag) => (
+                <label class="inline-flex items-center px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="tag"
+                    value={tag.id}
+                    checked={selectedTags.includes(tag.id.toString())}
+                    class="h-4 w-4 text-emerald-600 focus:ring-emerald-500 border-gray-300 dark:border-gray-600 rounded mr-2"
+                  />
+                  <span class="text-sm text-gray-700 dark:text-gray-300">
+                    {tag.name}
+                  </span>
+                </label>
+              ))}
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </div>
 
     <!-- Button-Leiste -->
@@ -113,8 +134,19 @@ const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, 
         id="toggleAdvanced"
         class="text-sm text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 flex items-center"
       >
-        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 mr-1">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+          stroke-width="1.5"
+          stroke="currentColor"
+          class="w-4 h-4 mr-1"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"
+          ></path>
         </svg>
         <span id="advancedLabel">
           {showAdvanced ? "Filter ausblenden" : "Erweiterte Filter"}
@@ -138,7 +170,11 @@ const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, 
     </div>
 
     <!-- Aktive Filter-Anzeige -->
-    <div id="activeFilters" class="flex flex-wrap gap-2 pt-2" style={showAdvanced ? "" : "display: none;"}>
+    <div
+      id="activeFilters"
+      class="flex flex-wrap gap-2 pt-2"
+      style={showAdvanced ? "" : "display: none;"}
+    >
       <!-- Hier werden aktive Filter als Tags angezeigt -->
     </div>
   </form>
@@ -154,7 +190,7 @@ const { allTags = [], selectedTags = [], searchTerm = "", showAdvanced = false, 
     const advancedFilters = document.getElementById("advancedFilters");
     const advancedLabel = document.getElementById("advancedLabel");
     const activeFiltersContainer = document.getElementById("activeFilters");
-    
+
     // Starteinstellungen
     let isAdvancedVisible = showAdvanced;
 

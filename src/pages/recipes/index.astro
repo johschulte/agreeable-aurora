@@ -12,41 +12,20 @@ export const prerender = false;
 // Benutzer-ID für den in der Datenbank vorhandenen Benutzer
 const userId = "ccce9083-2af5-49cf-90e4-f6e4d6e3fb98"; // test@example.com
 
-// Debug: Vollständige URL und Suchparameter anzeigen
-console.log("================================");
-console.log("DEBUG - Request started");
-console.log("DEBUG - Full request URL (toString):", Astro.url.toString());
-console.log("DEBUG - Request URL object:", Astro.request.url);
-console.log("DEBUG - URL object:", Object.getOwnPropertyNames(Astro.url));
-console.log("DEBUG - Raw search params (url.search):", Astro.url.search);
-console.log("DEBUG - Request headers:", Object.fromEntries(Astro.request.headers.entries()));
-console.log("================================");
-
 // Parameter aus URL oder Standard
 const searchParams = Astro.url.searchParams;
-console.log("DEBUG - searchParams:", searchParams);
-console.log("DEBUG - searchParams entries:", [...searchParams.entries()]);
-
 const searchTerm = searchParams.get("searchTerm") || "";
 const timeFilter = searchParams.get("timeFilter") || "all";
 
-// Hole alle Tags aus der URL - versuche verschiedene Parameter
+// Hole alle Tags aus der URL
 const tagParam = searchParams.get("tag");
-console.log("DEBUG - tagParam:", tagParam);
-
 const tagsParams = searchParams.getAll("tag");
-console.log("DEBUG - tagsParams:", tagsParams);
 
 // Setze selectedTags basierend auf URL-Parametern
 let selectedTags = tagsParams;
 if (selectedTags.length === 0 && tagParam) {
   selectedTags = [tagParam];
 }
-
-// Debug-Logging für URL-Parameter
-console.log("URL Parameter - searchTerm:", searchTerm);
-console.log("URL Parameter - timeFilter:", timeFilter);
-console.log("URL Parameter - selectedTags:", selectedTags);
 
 // Daten laden
 let recipes = [];
@@ -56,7 +35,6 @@ let errorMessage = null;
 try {
   // Lade alle Tags für die Filterkomponente
   allTags = await getUserTags(userId);
-  console.log("Available tags:", allTags.map(t => ({ id: t.id, name: t.name })));
 
   // Optionen für die Rezeptabfrage
   const options = {
@@ -67,26 +45,21 @@ try {
   // Wenn Tags ausgewählt sind, füge sie zur Abfrage hinzu
   if (selectedTags && selectedTags.length > 0) {
     // Filtere leere Tag-Werte heraus
-    const validTags = selectedTags.filter(tag => tag && tag !== "");
+    const validTags = selectedTags.filter((tag) => tag && tag !== "");
     if (validTags.length > 0) {
-      console.log("Filtering by tags:", validTags);
       options.tags = validTags;
     } else {
-      console.log("No valid tags selected for filtering");
       selectedTags = []; // Setze auf leeres Array, wenn keine gültigen Tags
     }
   } else {
-    console.log("No tags selected for filtering");
     selectedTags = []; // Setze auf leeres Array, wenn keine Tags
   }
 
   // Lade Rezepte, eventuell mit Tag-Filtern
   recipes = await getUserRecipes(userId, options);
-  console.log(`Loaded ${recipes.length} recipes from database`);
 
   // Clientseitig filtern nach Suchbegriff
   if (searchTerm) {
-    console.log(`Filtering by search term: "${searchTerm}"`);
     const searchLower = searchTerm.toLowerCase();
     const filteredRecipes = recipes.filter(
       (recipe) =>
@@ -97,20 +70,17 @@ try {
           i.name.toLowerCase().includes(searchLower)
         )
     );
-    console.log(`After search filter: ${filteredRecipes.length} recipes`);
     recipes = filteredRecipes;
   }
 
   // Zeit-Filter anwenden
   if (timeFilter && timeFilter !== "all") {
-    console.log(`Filtering by time: ${timeFilter} minutes`);
     const maxTime = parseInt(timeFilter, 10);
     const filteredRecipes = recipes.filter((recipe) => {
       const totalTime =
         (recipe.prep_time_minutes || 0) + (recipe.cook_time_minutes || 0);
       return totalTime <= maxTime;
     });
-    console.log(`After time filter: ${filteredRecipes.length} recipes`);
     recipes = filteredRecipes;
   }
 } catch (error) {

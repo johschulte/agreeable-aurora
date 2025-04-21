@@ -55,21 +55,10 @@ export async function getUserRecipes(userId, options = {}) {
   } = options;
 
   try {
-    // Debug-Logging der Eingabeparameter
-    console.log("DEBUG - getUserRecipes called with options:", {
-      userId,
-      sortBy,
-      sortOrder,
-      limit,
-      tags,
-    });
-
     let query;
 
     // Filtern nach Tags, wenn vorhanden
     if (tags && tags.length > 0) {
-      console.log("DEBUG - Building query WITH tag filter for tags:", tags);
-      
       // Verwende eine spezifische Abfrage mit INNER JOIN für Tag-Filterung
       query = supabase
         .from("recipes")
@@ -86,24 +75,17 @@ export async function getUserRecipes(userId, options = {}) {
         )
         .eq("user_id", userId)
         .in("recipe_tags.tag_id", tags);
-      
-      // Die toSQL()-Methode existiert nicht im Supabase-Client
-      // console.log("DEBUG - SQL Query with tags:", query.toSQL());
-      
+
       const { data, error } = await query
         .order(sortBy, { ascending: sortOrder === "asc" })
         .limit(limit);
 
       if (error) {
-        console.error("DEBUG - Error in tag filtered query:", error);
         throw error;
       }
-      
-      console.log(`DEBUG - Retrieved ${data?.length || 0} recipes with tag filter`);
+
       return data || [];
     } else {
-      console.log("DEBUG - Building query WITHOUT tag filter");
-      
       // Standardabfrage ohne Tag-Filter, aber mit LEFT JOIN für Tag-Informationen
       query = supabase
         .from("recipes")
@@ -119,17 +101,15 @@ export async function getUserRecipes(userId, options = {}) {
         `
         )
         .eq("user_id", userId);
-      
+
       const { data, error } = await query
         .order(sortBy, { ascending: sortOrder === "asc" })
         .limit(limit);
 
       if (error) {
-        console.error("DEBUG - Error in standard query:", error);
         throw error;
       }
-      
-      console.log(`DEBUG - Retrieved ${data?.length || 0} recipes without tag filter`);
+
       return data || [];
     }
   } catch (error) {
@@ -821,6 +801,35 @@ export async function uploadRecipeImage(userId, recipeId, file) {
     };
   } catch (error) {
     console.error("Fehler beim Hochladen des Bildes:", error);
+    throw error;
+  }
+}
+
+// Funktion zum Speichern eines externen Bildlinks für ein Rezept
+export async function saveRecipeImageUrl(recipeId, imageUrl) {
+  try {
+    // Validiere die URL (einfache Prüfung)
+    const validUrl = normalizeUrl(imageUrl);
+
+    if (!validUrl) {
+      throw new Error("Ungültige Bild-URL");
+    }
+
+    // Aktualisiere nur das image_path Feld in der Datenbank
+    const { error } = await supabase
+      .from("recipes")
+      .update({
+        image_path: validUrl,
+      })
+      .eq("id", recipeId);
+
+    if (error) throw error;
+
+    return {
+      url: validUrl,
+    };
+  } catch (error) {
+    console.error("Fehler beim Speichern der Bild-URL:", error);
     throw error;
   }
 }
